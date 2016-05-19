@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Simple Open EtherCAT Master Library
  *
  * File    : osal_win32.h

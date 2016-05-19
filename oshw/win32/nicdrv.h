@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Simple Open EtherCAT Master Library
  *
  * File    : nicdrv.h
@@ -46,11 +46,6 @@
 
 #ifndef _nicdrvh_
 #define _nicdrvh_
-
-#ifdef __cplusplus
-extern "C"
-{
-#endif
 
 #define HAVE_REMOTE
 
@@ -152,8 +147,5 @@ int ecx_outframe_red(ecx_portt *port, int idx);
 int ecx_waitinframe(ecx_portt *port, int idx, int timeout);
 int ecx_srconfirm(ecx_portt *port, int idx,int timeout);
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif

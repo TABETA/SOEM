@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Simple Open EtherCAT Master Library
  *
  * File    : ethercattype.h
@@ -54,10 +54,6 @@
 #ifndef _EC_TYPE_H
 #define _EC_TYPE_H
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
 
 /** Define Little or Big endian target */
 #define EC_LITTLE_ENDIAN
@@ -584,10 +580,6 @@ typedef struct
 
   #error "Must define one of EC_BIG_ENDIAN or EC_LITTLE_ENDIAN"
 
-#endif
-
-#ifdef __cplusplus
-}
 #endif
 
 #endif /* _EC_TYPE_H */

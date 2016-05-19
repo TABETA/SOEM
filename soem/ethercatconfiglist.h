@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Simple Open EtherCAT Master Library
  *
  * File    : ethercatconfiglist.h
@@ -51,10 +51,6 @@
 #ifndef _ethercatconfiglist_
 #define _ethercatconfiglist_
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
 
 /*
    explanation of dev:
@@ -95,8 +91,5 @@ ec_configlist_t ec_configlist[] = {
       {/*Man=*/EC_CONFIGEND,/*ID=*/0x00000000,/*Name=*/""        ,/*dtype=*/0,/*Ibits=*/ 0,/*Obits=*/ 0,/*SM2a*/     0,/*SM2f*/         0,/*SM3a*/     0,/*SM3f*/         0,/*FM0ac*/0,/*FM1ac*/0}
 };
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif

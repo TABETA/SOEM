@@ -224,7 +224,7 @@ int ecx_closenic(ecx_portt *port)
 void ec_setupheader(void *p)
 {
    ec_etherheadert *bp;
-   bp = p;
+   bp = static_cast<ec_etherheadert*>(p);
    bp->da0 = htons(0xffff);
    bp->da1 = htons(0xffff);
    bp->da2 = htons(0xffff);

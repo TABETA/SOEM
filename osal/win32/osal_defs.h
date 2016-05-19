@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Simple Open EtherCAT Master Library
  *
  * File    : osal_defs.h
@@ -41,10 +41,6 @@
 #ifndef _osal_defs_
 #define _osal_defs_
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
 
 #ifndef PACKED
 #define PACKED_BEGIN __pragma(pack(push, 1))
@@ -56,8 +52,5 @@ extern "C"
 #define OSAL_THREAD_FUNC void
 #define OSAL_THREAD_FUNC_RT void
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif

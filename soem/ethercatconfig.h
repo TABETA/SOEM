@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Simple Open EtherCAT Master Library
  *
  * File    : ethercatconfig.h
@@ -47,14 +47,29 @@
 #ifndef _ethercatconfig_
 #define _ethercatconfig_
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
 #define EC_NODEOFFSET      0x1000
 #define EC_TEMPNODE        0xffff
 
+struct ec_slavet;
+struct ecx_mapt_t;
+class EtherCATConfig
+{
+public:
+	static void init();
+	static int ec_findconfig(uint32 man, uint32 id);
+	static int find(ec_slavet *csl, uint32 man, uint32 id);
+	static uint32 getDefaultMBXSM0();
+	static uint32 getDefaultMBXSM1();
+	static void init_runnning();
+	static void findCoEandSoEmappingOfSlavesInMultipleThreads(ecx_contextt* context, uint16 slave);
+	static int ecx_find_mapt();
+	static int ecx_get_threadcount();
+private:
+	/* define maximum number of concurrent threads in mapping */
+	static const int MAX_MAPT = 8;
+	static ecx_mapt_t* ecx_mapt_;
+	static OSAL_THREAD_HANDLE* ecx_threadh_;
+};
 #ifdef EC_VER1
 int ec_config_init(uint8 usetable);
 int ec_config_map(void *pIOmap);
@@ -68,9 +83,5 @@ int ecx_config_init(ecx_contextt *context, uint8 usetable);
 int ecx_config_map_group(ecx_contextt *context, void *pIOmap, uint8 group);
 int ecx_recover_slave(ecx_contextt *context, uint16 slave, int timeout);
 int ecx_reconfig_slave(ecx_contextt *context, uint16 slave, int timeout);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

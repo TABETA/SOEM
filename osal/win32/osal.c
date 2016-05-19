@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Simple Open EtherCAT Master Library
  *
  * File    : osal.c
@@ -139,7 +139,7 @@ void osal_free(void *ptr)
 
 int osal_thread_create(void **thandle, int stacksize, void *func, void *param)
 {
-   *thandle = CreateThread(NULL, stacksize, func, param, 0, NULL);
+	*thandle = CreateThread(NULL, stacksize, static_cast<LPTHREAD_START_ROUTINE>(func), param, 0, NULL);
    if(!thandle)
    {
       return 0;

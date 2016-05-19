@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Simple Open EtherCAT Master Library
  *
  * File    : ethercatbase.c
@@ -64,7 +64,7 @@
  * @param[in]  length         = length of databuffer
  * @param[in]  data           = databuffer to be copied into datagram
  */
-static void ecx_writedatagramdata(void *datagramdata, ec_cmdtype com, uint16 length, const void * data)
+void ecx::writedatagramdata(void *datagramdata, ec_cmdtype com, uint16 length, const void * data)
 {
    if (length > 0)
    {
@@ -101,12 +101,12 @@ static void ecx_writedatagramdata(void *datagramdata, ec_cmdtype com, uint16 len
  * @param[in]  data        = databuffer to be copied in datagram
  * @return always 0
  */
-int ecx_setupdatagram(ecx_portt *port, void *frame, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data)
+int ecx::setupdatagram(ecx_portt *port, void *frame, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data)
 {
    ec_comt *datagramP;
    uint8 *frameP;
 
-   frameP = frame;
+   frameP = static_cast<uint8 *>(frame);
    /* Ethernet header is preset and fixed in frame buffers
       EtherCAT header needs to be added after that */
    datagramP = (ec_comt*)&frameP[ETH_HEADERSIZE];
@@ -116,7 +116,7 @@ int ecx_setupdatagram(ecx_portt *port, void *frame, uint8 com, uint8 idx, uint16
    datagramP->ADP = htoes(ADP);
    datagramP->ADO = htoes(ADO);
    datagramP->dlength = htoes(length);
-   ecx_writedatagramdata(&frameP[ETH_HEADERSIZE + EC_HEADERSIZE], com, length, data);
+   ecx::writedatagramdata(&frameP[ETH_HEADERSIZE + EC_HEADERSIZE], static_cast<ec_cmdtype>(com), length, data);
    /* set WKC to zero */
    frameP[ETH_HEADERSIZE + EC_HEADERSIZE + length] = 0x00;
    frameP[ETH_HEADERSIZE + EC_HEADERSIZE + length + 1] = 0x00;
@@ -139,13 +139,13 @@ int ecx_setupdatagram(ecx_portt *port, void *frame, uint8 com, uint8 idx, uint16
  * @param[in]  data       = databuffer to be copied in datagram
  * @return Offset to data in rx frame, usefull to retrieve data after RX.
  */
-int ecx_adddatagram(ecx_portt *port, void *frame, uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data)
+int ecx::adddatagram(ecx_portt *port, void *frame, uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data)
 {
    ec_comt *datagramP;
    uint8 *frameP;
    uint16 prevlength;
 
-   frameP = frame;
+   frameP = static_cast<uint8 *>(frame);
    /* copy previous frame size */
    prevlength = port->txbuflength[idx];
    datagramP = (ec_comt*)&frameP[ETH_HEADERSIZE];
@@ -169,7 +169,7 @@ int ecx_adddatagram(ecx_portt *port, void *frame, uint8 com, uint8 idx, boolean 
       /* this is the last datagram in the frame */
       datagramP->dlength = htoes(length);
    }
-   ecx_writedatagramdata(&frameP[prevlength + EC_HEADERSIZE - EC_ELENGTHSIZE], com, length, data);
+   ecx::writedatagramdata(&frameP[prevlength + EC_HEADERSIZE - EC_ELENGTHSIZE], static_cast<ec_cmdtype>(com), length, data);
    /* set WKC to zero */
    frameP[prevlength + EC_HEADERSIZE - EC_ELENGTHSIZE + length] = 0x00;
    frameP[prevlength + EC_HEADERSIZE - EC_ELENGTHSIZE + length + 1] = 0x00;
@@ -191,7 +191,7 @@ int ecx_adddatagram(ecx_portt *port, void *frame, uint8 com, uint8 idx, boolean 
  * @param[in] timeout     = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_BWR (ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ecx::BWR (ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
    uint8 idx;
    int wkc;
@@ -199,7 +199,7 @@ int ecx_BWR (ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data,
    /* get fresh index */
    idx = ecx_getindex (port);
    /* setup datagram */
-   ecx_setupdatagram (port, &(port->txbuf[idx]), EC_CMD_BWR, idx, ADP, ADO, length, data);
+   ecx::setupdatagram (port, &(port->txbuf[idx]), EC_CMD_BWR, idx, ADP, ADO, length, data);
    /* send data and wait for answer */
    wkc = ecx_srconfirm (port, idx, timeout);
    /* clear buffer status */
@@ -218,7 +218,7 @@ int ecx_BWR (ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data,
  * @param[in]  timeout    = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_BRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ecx::BRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
    uint8 idx;
    int wkc;
@@ -226,7 +226,7 @@ int ecx_BRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, 
    /* get fresh index */
    idx = ecx_getindex(port);
    /* setup datagram */
-   ecx_setupdatagram(port, &(port->txbuf[idx]), EC_CMD_BRD, idx, ADP, ADO, length, data);
+   ecx::setupdatagram(port, &(port->txbuf[idx]), EC_CMD_BRD, idx, ADP, ADO, length, data);
    /* send data and wait for answer */
    wkc = ecx_srconfirm (port, idx, timeout);
    if (wkc > 0)
@@ -250,13 +250,13 @@ int ecx_BRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, 
  * @param[in]  timeout    = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_APRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ecx::APRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
    int wkc;
    uint8 idx;
 
    idx = ecx_getindex(port);
-   ecx_setupdatagram(port, &(port->txbuf[idx]), EC_CMD_APRD, idx, ADP, ADO, length, data);
+   ecx::setupdatagram(port, &(port->txbuf[idx]), EC_CMD_APRD, idx, ADP, ADO, length, data);
    wkc = ecx_srconfirm(port, idx, timeout);
    if (wkc > 0)
    {
@@ -278,13 +278,13 @@ int ecx_APRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data,
  * @param[in]  timeout    = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_ARMW(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ecx::ARMW(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
    int wkc;
    uint8 idx;
 
    idx = ecx_getindex(port);
-   ecx_setupdatagram(port, &(port->txbuf[idx]), EC_CMD_ARMW, idx, ADP, ADO, length, data);
+   ecx::setupdatagram(port, &(port->txbuf[idx]), EC_CMD_ARMW, idx, ADP, ADO, length, data);
    wkc = ecx_srconfirm(port, idx, timeout);
    if (wkc > 0)
    {
@@ -306,13 +306,13 @@ int ecx_ARMW(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data,
  * @param[in]  timeout    = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_FRMW(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ecx::FRMW(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
    int wkc;
    uint8 idx;
 
    idx = ecx_getindex(port);
-   ecx_setupdatagram(port, &(port->txbuf[idx]), EC_CMD_FRMW, idx, ADP, ADO, length, data);
+   ecx::setupdatagram(port, &(port->txbuf[idx]), EC_CMD_FRMW, idx, ADP, ADO, length, data);
    wkc = ecx_srconfirm(port, idx, timeout);
    if (wkc > 0)
    {
@@ -331,12 +331,12 @@ int ecx_FRMW(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data,
  * @param[in] timeout     = timeout in us, standard is EC_TIMEOUTRET
  * @return word data from slave
  */
-uint16 ecx_APRDw(ecx_portt *port, uint16 ADP, uint16 ADO, int timeout)
+uint16 ecx::APRDw(ecx_portt *port, uint16 ADP, uint16 ADO, int timeout)
 {
    uint16 w;
 
    w = 0;
-   ecx_APRD(port, ADP, ADO, sizeof(w), &w, timeout);
+   ecx::APRD(port, ADP, ADO, sizeof(w), &w, timeout);
 
    return w;
 }
@@ -351,13 +351,13 @@ uint16 ecx_APRDw(ecx_portt *port, uint16 ADP, uint16 ADO, int timeout)
  * @param[in]  timeout    = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_FPRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ecx::FPRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
    int wkc;
    uint8 idx;
 
    idx = ecx_getindex(port);
-   ecx_setupdatagram(port, &(port->txbuf[idx]), EC_CMD_FPRD, idx, ADP, ADO, length, data);
+   ecx::setupdatagram(port, &(port->txbuf[idx]), EC_CMD_FPRD, idx, ADP, ADO, length, data);
    wkc = ecx_srconfirm(port, idx, timeout);
    if (wkc > 0)
    {
@@ -376,12 +376,12 @@ int ecx_FPRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data,
  * @param[in] timeout     = timeout in us, standard is EC_TIMEOUTRET
  * @return word data from slave
  */
-uint16 ecx_FPRDw(ecx_portt *port, uint16 ADP, uint16 ADO, int timeout)
+uint16 ecx::FPRDw(ecx_portt *port, uint16 ADP, uint16 ADO, int timeout)
 {
    uint16 w;
 
    w = 0;
-   ecx_FPRD(port, ADP, ADO, sizeof(w), &w, timeout);
+   ecx::FPRD(port, ADP, ADO, sizeof(w), &w, timeout);
    return w;
 }
 
@@ -395,13 +395,13 @@ uint16 ecx_FPRDw(ecx_portt *port, uint16 ADP, uint16 ADO, int timeout)
  * @param[in] timeout     = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_APWR(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ecx::APWR(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
    uint8 idx;
    int wkc;
 
    idx = ecx_getindex(port);
-   ecx_setupdatagram(port, &(port->txbuf[idx]), EC_CMD_APWR, idx, ADP, ADO, length, data);
+   ecx::setupdatagram(port, &(port->txbuf[idx]), EC_CMD_APWR, idx, ADP, ADO, length, data);
    wkc = ecx_srconfirm(port, idx, timeout);
    ecx_setbufstat(port, idx, EC_BUF_EMPTY);
 
@@ -417,9 +417,9 @@ int ecx_APWR(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data,
  * @param[in] timeout     = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_APWRw(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 data, int timeout)
+int ecx::APWRw(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 data, int timeout)
 {
-   return ecx_APWR(port, ADP, ADO, sizeof(data), &data, timeout);
+   return ecx::APWR(port, ADP, ADO, sizeof(data), &data, timeout);
 }
 
 /** FPWR "configured address write" primitive. Blocking.
@@ -432,13 +432,13 @@ int ecx_APWRw(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 data, int timeout)
  * @param[in] timeout     = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_FPWR(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ecx::FPWR(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
    int wkc;
    uint8 idx;
 
    idx = ecx_getindex(port);
-   ecx_setupdatagram(port, &(port->txbuf[idx]), EC_CMD_FPWR, idx, ADP, ADO, length, data);
+   ecx::setupdatagram(port, &(port->txbuf[idx]), EC_CMD_FPWR, idx, ADP, ADO, length, data);
    wkc = ecx_srconfirm(port, idx, timeout);
    ecx_setbufstat(port, idx, EC_BUF_EMPTY);
 
@@ -454,9 +454,9 @@ int ecx_FPWR(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data,
  * @param[in] timeout     = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_FPWRw(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 data, int timeout)
+int ecx::FPWRw(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 data, int timeout)
 {
-   return ecx_FPWR(port, ADP, ADO, sizeof(data), &data, timeout);
+   return ecx::FPWR(port, ADP, ADO, sizeof(data), &data, timeout);
 }
 
 /** LRW "logical memory read / write" primitive. Blocking.
@@ -468,13 +468,13 @@ int ecx_FPWRw(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 data, int timeout)
  * @param[in]     timeout = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_LRW(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeout)
+int ecx::LRW(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeout)
 {
    uint8 idx;
    int wkc;
 
    idx = ecx_getindex(port);
-   ecx_setupdatagram(port, &(port->txbuf[idx]), EC_CMD_LRW, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
+   ecx::setupdatagram(port, &(port->txbuf[idx]), EC_CMD_LRW, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
    wkc = ecx_srconfirm(port, idx, timeout);
    if ((wkc > 0) && (port->rxbuf[idx][EC_CMDOFFSET] == EC_CMD_LRW))
    {
@@ -494,13 +494,13 @@ int ecx_LRW(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeo
  * @param[in]  timeout    = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_LRD(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeout)
+int ecx::LRD(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeout)
 {
    uint8 idx;
    int wkc;
 
    idx = ecx_getindex(port);
-   ecx_setupdatagram(port, &(port->txbuf[idx]), EC_CMD_LRD, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
+   ecx::setupdatagram(port, &(port->txbuf[idx]), EC_CMD_LRD, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
    wkc = ecx_srconfirm(port, idx, timeout);
    if ((wkc > 0) && (port->rxbuf[idx][EC_CMDOFFSET]==EC_CMD_LRD))
    {
@@ -520,13 +520,13 @@ int ecx_LRD(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeo
  * @param[in] timeout     = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_LWR(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeout)
+int ecx::LWR(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeout)
 {
    uint8 idx;
    int wkc;
 
    idx = ecx_getindex(port);
-   ecx_setupdatagram(port, &(port->txbuf[idx]), EC_CMD_LWR, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
+   ecx::setupdatagram(port, &(port->txbuf[idx]), EC_CMD_LWR, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
    wkc = ecx_srconfirm(port, idx, timeout);
    ecx_setbufstat(port, idx, EC_BUF_EMPTY);
 
@@ -545,7 +545,7 @@ int ecx_LWR(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeo
  * @param[in]     timeout = timeout in us, standard is EC_TIMEOUTRET
  * @return Workcounter or EC_NOFRAME
  */
-int ecx_LRWDC(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int64 *DCtime, int timeout)
+int ecx::LRWDC(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int64 *DCtime, int timeout)
 {
    uint16 DCtO;
    uint8 idx;
@@ -554,10 +554,10 @@ int ecx_LRWDC(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, uint16 
 
    idx = ecx_getindex(port);
    /* LRW in first datagram */
-   ecx_setupdatagram(port, &(port->txbuf[idx]), EC_CMD_LRW, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
+   ecx::setupdatagram(port, &(port->txbuf[idx]), EC_CMD_LRW, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
    /* FPRMW in second datagram */
    DCtE = htoell(*DCtime);
-   DCtO = ecx_adddatagram(port, &(port->txbuf[idx]), EC_CMD_FRMW, idx, FALSE, DCrs, ECT_REG_DCSYSTIME, sizeof(DCtime), &DCtE);
+   DCtO = ecx::adddatagram(port, &(port->txbuf[idx]), EC_CMD_FRMW, idx, FALSE, DCrs, ECT_REG_DCSYSTIME, sizeof(DCtime), &DCtE);
    wkc = ecx_srconfirm(port, idx, timeout);
    if ((wkc > 0) && (port->rxbuf[idx][EC_CMDOFFSET] == EC_CMD_LRW))
    {
@@ -572,102 +572,102 @@ int ecx_LRWDC(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, uint16 
 }
 
 #ifdef EC_VER1
-int ec_setupdatagram(void *frame, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data)
+int ec::setupdatagram(void *frame, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data)
 {
-   return ecx_setupdatagram (&ecx_port, frame, com, idx, ADP, ADO, length, data);
+   return ecx::setupdatagram (&ecx_port, frame, com, idx, ADP, ADO, length, data);
 }
 
-int ec_adddatagram (void *frame, uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data)
+int ec::adddatagram (void *frame, uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data)
 {
-   return ecx_adddatagram (&ecx_port, frame, com, idx, more, ADP, ADO, length, data);
+   return ecx::adddatagram (&ecx_port, frame, com, idx, more, ADP, ADO, length, data);
 }
 
-int ec_BWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ec::BWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
-   return ecx_BWR (&ecx_port, ADP, ADO, length, data, timeout);
+   return ecx::BWR (&ecx_port, ADP, ADO, length, data, timeout);
 }
 
-int ec_BRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ec::BRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
-   return ecx_BRD(&ecx_port, ADP, ADO, length, data, timeout);
+   return ecx::BRD(&ecx_port, ADP, ADO, length, data, timeout);
 }
 
-int ec_APRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ec::APRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
-   return ecx_APRD(&ecx_port, ADP, ADO, length, data, timeout);
+   return ecx::APRD(&ecx_port, ADP, ADO, length, data, timeout);
 }
 
-int ec_ARMW(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ec::ARMW(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
-   return ecx_ARMW(&ecx_port, ADP, ADO, length, data, timeout);
+   return ecx::ARMW(&ecx_port, ADP, ADO, length, data, timeout);
 }
 
-int ec_FRMW(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ec::FRMW(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
-   return ecx_FRMW(&ecx_port, ADP, ADO, length, data, timeout);
+   return ecx::FRMW(&ecx_port, ADP, ADO, length, data, timeout);
 }
 
-uint16 ec_APRDw(uint16 ADP, uint16 ADO, int timeout)
+uint16 ec::APRDw(uint16 ADP, uint16 ADO, int timeout)
 {
    uint16 w;
 
    w = 0;
-   ec_APRD(ADP, ADO, sizeof(w), &w, timeout);
+   ec::APRD(ADP, ADO, sizeof(w), &w, timeout);
 
    return w;
 }
 
-int ec_FPRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ec::FPRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
-   return ecx_FPRD(&ecx_port, ADP, ADO, length, data, timeout);
+   return ecx::FPRD(&ecx_port, ADP, ADO, length, data, timeout);
 }
 
-uint16 ec_FPRDw(uint16 ADP, uint16 ADO, int timeout)
+uint16 ec::FPRDw(uint16 ADP, uint16 ADO, int timeout)
 {
    uint16 w;
 
    w = 0;
-   ec_FPRD(ADP, ADO, sizeof(w), &w, timeout);
+   ec::FPRD(ADP, ADO, sizeof(w), &w, timeout);
    return w;
 }
 
-int ec_APWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ec::APWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
-   return ecx_APWR(&ecx_port, ADP, ADO, length, data, timeout);
+   return ecx::APWR(&ecx_port, ADP, ADO, length, data, timeout);
 }
 
-int ec_APWRw(uint16 ADP, uint16 ADO, uint16 data, int timeout)
+int ec::APWRw(uint16 ADP, uint16 ADO, uint16 data, int timeout)
 {
-   return ec_APWR(ADP, ADO, sizeof(data), &data, timeout);
+   return ec::APWR(ADP, ADO, sizeof(data), &data, timeout);
 }
 
-int ec_FPWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
+int ec::FPWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
-   return ecx_FPWR(&ecx_port, ADP, ADO, length, data, timeout);
+   return ecx::FPWR(&ecx_port, ADP, ADO, length, data, timeout);
 }
 
-int ec_FPWRw(uint16 ADP, uint16 ADO, uint16 data, int timeout)
+int ec::FPWRw(uint16 ADP, uint16 ADO, uint16 data, int timeout)
 {
-   return ec_FPWR(ADP, ADO, sizeof(data), &data, timeout);
+   return ec::FPWR(ADP, ADO, sizeof(data), &data, timeout);
 }
 
-int ec_LRW(uint32 LogAdr, uint16 length, void *data, int timeout)
+int ec::LRW(uint32 LogAdr, uint16 length, void *data, int timeout)
 {
-   return ecx_LRW(&ecx_port, LogAdr, length, data, timeout);
+   return ecx::LRW(&ecx_port, LogAdr, length, data, timeout);
 }
 
-int ec_LRD(uint32 LogAdr, uint16 length, void *data, int timeout)
+int ec::LRD(uint32 LogAdr, uint16 length, void *data, int timeout)
 {
-   return ecx_LRD(&ecx_port, LogAdr, length, data, timeout);
+   return ecx::LRD(&ecx_port, LogAdr, length, data, timeout);
 }
 
-int ec_LWR(uint32 LogAdr, uint16 length, void *data, int timeout)
+int ec::LWR(uint32 LogAdr, uint16 length, void *data, int timeout)
 {
-   return ecx_LWR(&ecx_port, LogAdr, length, data, timeout);
+   return ecx::LWR(&ecx_port, LogAdr, length, data, timeout);
 }
 
-int ec_LRWDC(uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int64 *DCtime, int timeout)
+int ec::LRWDC(uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int64 *DCtime, int timeout)
 {
-   return ecx_LRWDC(&ecx_port, LogAdr, length, data, DCrs, DCtime, timeout);
+   return ecx::LRWDC(&ecx_port, LogAdr, length, data, DCrs, DCtime, timeout);
 }
 #endif

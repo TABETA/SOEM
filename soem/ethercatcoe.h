@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Simple Open EtherCAT Master Library
  *
  * File    : ethercatcoe.h
@@ -47,10 +47,6 @@
 #ifndef _ethercatcoe_
 #define _ethercatcoe_
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
 
 /** max entries in Object Description list */
 #define EC_MAXODLIST   1024
@@ -59,7 +55,7 @@ extern "C"
 #define EC_MAXOELIST   256
 
 /* Storage for object description list */
-typedef struct
+struct ec_ODlistt
 {
    /** slave number */
    uint16  Slave;
@@ -75,10 +71,10 @@ typedef struct
    uint8   MaxSub[EC_MAXODLIST];
    /** textual description of each index */
    char    Name[EC_MAXODLIST][EC_MAXNAME+1];
-} ec_ODlistt;
+};
 
 /* storage for object list entry information */
-typedef struct
+struct ec_OElistt
 {
    /** number of entries in list */
    uint16 Entries;
@@ -92,7 +88,7 @@ typedef struct
    uint16 ObjAccess[EC_MAXOELIST];
    /** textual description of each index */
    char   Name[EC_MAXOELIST][EC_MAXNAME+1];
-} ec_OElistt;
+};
 
 #ifdef EC_VER1
 void ec_SDOerror(uint16 Slave, uint16 Index, uint8 SubIdx, int32 AbortCode);
@@ -123,9 +119,5 @@ int ecx_readODlist(ecx_contextt *context, uint16 Slave, ec_ODlistt *pODlist);
 int ecx_readODdescription(ecx_contextt *context, uint16 Item, ec_ODlistt *pODlist);
 int ecx_readOEsingle(ecx_contextt *context, uint16 Item, uint8 SubI, ec_ODlistt *pODlist, ec_OElistt *pOElist);
 int ecx_readOE(ecx_contextt *context, uint16 Item, ec_ODlistt *pODlist, ec_OElistt *pOElist);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif
