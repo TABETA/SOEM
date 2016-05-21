@@ -133,8 +133,6 @@ boolean                 EcatError = FALSE;
 
 int64                   ec_DCtime;
 
-ecx_portt               ecx_port;
-ecx_redportt            ecx_redport;
 
 ecx_contextt* ecx_contextt::getInstance()
 {
@@ -339,7 +337,7 @@ int ecx_contextt::init( const char * ifname)
  * @param[in]  if2name  = Secondary Dev name, f.e. "eth1"
  * @return >0 if OK
  */
-int ecx_contextt::init_redundant( ecx_redportt *redport, const char *ifname, char *if2name)
+int ecx_contextt::init_redundant(ecx_redportt *redport, const char *ifname, char *if2name)
 {
    int rval, zbuf;
    ec_etherheadert *ehp;

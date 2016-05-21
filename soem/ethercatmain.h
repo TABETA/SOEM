@@ -411,7 +411,8 @@ PACKED_END
 
 struct ec_ODlistt;
 struct ec_OElistt;
-
+struct ecx_portt;
+struct ecx_redportt;
 typedef int(*FOEhook_t)(uint16 slave, int packetnumber, int datasize);
 
 /** Context structure , referenced by all ecx functions*/

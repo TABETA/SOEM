@@ -47,31 +47,174 @@
 #ifndef _ethercatbase_
 #define _ethercatbase_
 
-struct ecx_contextt;
-class ecx
+#define HAVE_REMOTE
+
+#include <pcap.h>
+#include <Packet32.h>
+
+/** pointer structure to Tx and Rx stacks */
+typedef struct
 {
-public:
-	static int setupdatagram(ecx_portt *port, void *frame, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data);
-	static int adddatagram(ecx_portt *port, void *frame, uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data);
-	static int BWR(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
-	static int BRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
-	static int APRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
-	static int ARMW(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
-	static int FRMW(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
-	static uint16 APRDw(ecx_portt *port, uint16 ADP, uint16 ADO, int timeout);
-	static int FPRD(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
-	static uint16 FPRDw(ecx_portt *port, uint16 ADP, uint16 ADO, int timeout);
-	static int APWRw(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 data, int timeout);
-	static int APWR(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
-	static int FPWRw(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 data, int timeout);
-	static int FPWR(ecx_portt *port, uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
-	static int LRW(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeout);
-	static int LRD(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeout);
-	static int LWR(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, int timeout);
-	static int LRWDC(ecx_portt *port, uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int64 *DCtime, int timeout);
+	/** socket connection used */
+	pcap_t      **sock;
+	/** tx buffer */
+	ec_bufT(*txbuf)[EC_MAXBUF];
+	/** tx buffer lengths */
+	int(*txbuflength)[EC_MAXBUF];
+	/** temporary receive buffer */
+	ec_bufT     *tempbuf;
+	/** rx buffers */
+	ec_bufT(*rxbuf)[EC_MAXBUF];
+	/** rx buffer status fields */
+	int(*rxbufstat)[EC_MAXBUF];
+	/** received MAC source address (middle word) */
+	int(*rxsa)[EC_MAXBUF];
+} ec_stackT;
+
+/** pointer structure to buffers for redundant port */
+struct ecx_redportt
+{
+	ec_stackT   stack;
+	pcap_t      *sockhandle;
+	/** rx buffers */
+	ec_bufT rxbuf[EC_MAXBUF];
+	/** rx buffer status */
+	int rxbufstat[EC_MAXBUF];
+	/** rx MAC source address */
+	int rxsa[EC_MAXBUF];
+	/** temporary rx buffer */
+	ec_bufT tempinbuf;
+} ;
+
+struct ecx_contextt;
+/** pointer structure to buffers, vars and mutexes for port instantiation */
+struct ecx_portt
+{
 private:
+
+
+	int recvpkt(int stacknumber);
+	int waitinframe_red(int idx, osal_timert *timer);
+public:
+	static ecx_portt* getInstance()
+	{
+		static ecx_portt ins;
+		return &ins;
+	}
+
+	int setupdatagram(void *frame, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data);
+	int adddatagram(void *frame, uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data);
+	int BWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
+	int BRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
+	int APRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
+	int ARMW(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
+	int FRMW(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
+	uint16 APRDw(uint16 ADP, uint16 ADO, int timeout);
+	int FPRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
+	uint16 FPRDw(uint16 ADP, uint16 ADO, int timeout);
+	int APWRw(uint16 ADP, uint16 ADO, uint16 data, int timeout);
+	int APWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
+	int FPWRw(uint16 ADP, uint16 ADO, uint16 data, int timeout);
+	int FPWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
+	int LRW(uint32 LogAdr, uint16 length, void *data, int timeout);
+	int LRD(uint32 LogAdr, uint16 length, void *data, int timeout);
+	int LWR(uint32 LogAdr, uint16 length, void *data, int timeout);
+	int LRWDC(uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int64 *DCtime, int timeout);
+	int setupnic(const char *ifname, int secondary);
+	int closenic();
+	int getindex();
+	void setbufstat(int idx, int bufstat);
+	int outframe(int idx, int stacknumber);
+	int outframe_red(int idx);
+	int inframe(int idx, int stacknumber);
+	int waitinframe(int idx, int timeout);
+	int srconfirm(int idx, int timeout);
 	static void writedatagramdata(void *datagramdata, ec_cmdtype com, uint16 length, const void * data);
+
+private:
+	ec_stackT   stack;
+	pcap_t      *sockhandle;
+	/** rx buffers */
+	ec_bufT rxbuf[EC_MAXBUF];
+	/** rx buffer status */
+	int rxbufstat[EC_MAXBUF];
+	/** rx MAC source address */
+	int rxsa[EC_MAXBUF];
+	/** temporary rx buffer */
+	ec_bufT tempinbuf;
+	/** temporary rx buffer status */
+	int tempinbufs;
+	/** transmit buffers */
+	ec_bufT txbuf[EC_MAXBUF];
+	/** transmit buffer lenghts */
+	int txbuflength[EC_MAXBUF];
+	/** temporary tx buffer */
+	ec_bufT txbuf2;
+	/** temporary tx buffer length */
+	int txbuflength2;
+	/** last used frame index */
+	int lastidx;
+	/** current redundancy state */
+	int redstate;
+	/** pointer to redundancy port and buffers */
+	ecx_redportt *redport;
+	CRITICAL_SECTION getindex_mutex;
+	CRITICAL_SECTION tx_mutex;
+	CRITICAL_SECTION rx_mutex;
 };
+
+extern const uint16 priMAC[3];
+extern const uint16 secMAC[3];
+
+#ifdef EC_VER1
+extern ecx_redportt  ecx_redport;
+
+int ec_setupnic(const char *ifname, int secondary)
+{
+	return ecx_portt::getInstance()->setupnic(ifname, secondary);
+}
+
+int ec_closenic(void)
+{
+	return ecx_portt::getInstance()->closenic();
+}
+
+int ec_getindex(void)
+{
+	return ecx_portt::getInstance()->getindex();
+}
+
+void ec_setbufstat(int idx, int bufstat)
+{
+	ecx_portt::getInstance()->setbufstat(idx, bufstat);
+}
+
+int ec_outframe(int idx, int stacknumber)
+{
+	return ecx_portt::getInstance()->outframe(idx, stacknumber);
+}
+
+int ec_outframe_red(int idx)
+{
+	return ecx_portt::getInstance()->outframe_red(idx);
+}
+
+int ec_inframe(int idx, int stacknumber)
+{
+	return ecx_portt::getInstance()->inframe(idx, stacknumber);
+}
+
+int ec_waitinframe(int idx, int timeout)
+{
+	return ecx_portt::getInstance()->waitinframe(idx, timeout);
+}
+
+int ec_srconfirm(int idx, int timeout)
+{
+	return ecx_portt::getInstance()->srconfirm(idx, timeout);
+}
+
+#endif
 //#ifdef EC_VER1
 class ec
 {
@@ -96,6 +239,79 @@ public:
 	static int LRWDC(uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int64 *DCtime, int timeout);
 };
 //#endif
+
+
+#ifdef WIN32
+
+
+#include <sys/types.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <string.h>
+
+#include <winsock2.h>
+#include "ethercattype.h"
+#include <Mmsystem.h>
+#include "nicdrv.h"
+#include "osal_win32.h"
+
+#endif
+
+/** Redundancy modes */
+enum
+{
+	/** No redundancy, single NIC mode */
+	ECT_RED_NONE,
+	/** Double redundant NIC connecetion */
+	ECT_RED_DOUBLE
+};
+
+/** Primary source MAC address used for EtherCAT.
+* This address is not the MAC address used from the NIC.
+* EtherCAT does not care about MAC addressing, but it is used here to
+* differentiate the route the packet traverses through the EtherCAT
+* segment. This is needed to fund out the packet flow in redundant
+* confihurations. */
+const uint16 priMAC[3] = { 0x0101, 0x0101, 0x0101 };
+/** Secondary source MAC address used for EtherCAT. */
+const uint16 secMAC[3] = { 0x0404, 0x0404, 0x0404 };
+
+/** second MAC word is used for identification */
+#define RX_PRIM priMAC[1]
+/** second MAC word is used for identification */
+#define RX_SEC secMAC[1]
+
+static char errbuf[PCAP_ERRBUF_SIZE];
+
+static void ecx_clear_rxbufstat(int *rxbufstat)
+{
+	int i;
+	for (i = 0; i < EC_MAXBUF; i++)
+	{
+		rxbufstat[i] = EC_BUF_EMPTY;
+	}
+}
+
+/** Fill buffer with ethernet header structure.
+* Destination MAC is always broadcast.
+* Ethertype is always ETH_P_ECAT.
+* @param[out] p = buffer
+*/
+void ec_setupheader(void *p)
+{
+	ec_etherheadert *bp;
+	bp = static_cast<ec_etherheadert*>(p);
+	bp->da0 = htons(0xffff);
+	bp->da1 = htons(0xffff);
+	bp->da2 = htons(0xffff);
+	bp->sa0 = htons(priMAC[0]);
+	bp->sa1 = htons(priMAC[1]);
+	bp->sa2 = htons(priMAC[2]);
+	bp->etype = htons(ETH_P_ECAT);
+}
+
+
+
 
 
 #endif
