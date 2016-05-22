@@ -179,13 +179,13 @@ int eeprom_read(int slave, int start, int length)
    {
       aiadr = 1 - slave;
       eepctl = 2;
-      wkc = ec_APWR(aiadr, ECT_REG_EEPCFG, sizeof(eepctl), &eepctl , EC_TIMEOUTRET3); /* force Eeprom from PDI */
+      wkc = ec::APWR(aiadr, ECT_REG_EEPCFG, sizeof(eepctl), &eepctl , EC_TIMEOUTRET3); /* force Eeprom from PDI */
       eepctl = 0;
-      wkc = ec_APWR(aiadr, ECT_REG_EEPCFG, sizeof(eepctl), &eepctl , EC_TIMEOUTRET3); /* set Eeprom to master */
+	  wkc = ec::APWR(aiadr, ECT_REG_EEPCFG, sizeof(eepctl), &eepctl, EC_TIMEOUTRET3); /* set Eeprom to master */
 
       estat = 0x0000;
       aiadr = 1 - slave;
-      wkc=ec_APRD(aiadr, ECT_REG_EEPSTAT, sizeof(estat), &estat, EC_TIMEOUTRET3); /* read eeprom status */
+	  wkc = ec::APRD(aiadr, ECT_REG_EEPSTAT, sizeof(estat), &estat, EC_TIMEOUTRET3); /* read eeprom status */
       estat = etohs(estat);
       if (estat & EC_ESTAT_R64)
       {
@@ -232,9 +232,9 @@ int eeprom_write(int slave, int start, int length)
    {
       aiadr = 1 - slave;
       eepctl = 2;
-      wkc = ec_APWR(aiadr, ECT_REG_EEPCFG, sizeof(eepctl), &eepctl , EC_TIMEOUTRET3); /* force Eeprom from PDI */
+	  wkc = ec::APWR(aiadr, ECT_REG_EEPCFG, sizeof(eepctl), &eepctl, EC_TIMEOUTRET3); /* force Eeprom from PDI */
       eepctl = 0;
-      wkc = ec_APWR(aiadr, ECT_REG_EEPCFG, sizeof(eepctl), &eepctl , EC_TIMEOUTRET3); /* set Eeprom to master */
+	  wkc = ec::APWR(aiadr, ECT_REG_EEPCFG, sizeof(eepctl), &eepctl, EC_TIMEOUTRET3); /* set Eeprom to master */
 
       aiadr = 1 - slave;
       wbuf = (uint16 *)&ebuf[0];
@@ -266,7 +266,7 @@ void eepromtool(char *ifname, int slave, int mode, char *fname)
       printf("ec_init on %s succeeded.\n",ifname);
 
       w = 0x0000;
-       wkc = ec_BRD(0x0000, ECT_REG_TYPE, sizeof(w), &w, EC_TIMEOUTSAFE);      /* detect number of slaves */
+	  wkc = ec::BRD(0x0000, ECT_REG_TYPE, sizeof(w), &w, EC_TIMEOUTSAFE);      /* detect number of slaves */
        if (wkc > 0)
        {
          ec_slavecount = wkc;

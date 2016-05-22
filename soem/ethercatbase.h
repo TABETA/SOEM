@@ -74,6 +74,11 @@ struct ec_stackT
 /** pointer structure to buffers for redundant port */
 struct ecx_redportt
 {
+	static ecx_redportt* getInstance()
+	{
+		static ecx_redportt ins;
+		return &ins;
+	}
 	ec_stackT   stack;
 	pcap_t      *sockhandle;
 	/** rx buffers */
@@ -87,6 +92,7 @@ struct ecx_redportt
 } ;
 
 struct ecx_contextt;
+struct ec_alstatust;
 /** pointer structure to buffers, vars and mutexes for port instantiation */
 struct ecx_portt
 {
@@ -172,56 +178,6 @@ extern const uint16 priMAC[3];
 extern const uint16 secMAC[3];
 
 #ifdef EC_VER1
-extern ecx_redportt  ecx_redport;
-
-int ec_setupnic(const char *ifname, int secondary)
-{
-	ecx_portt* p = ecx_portt::getInstance();
-	return secondary ? p->setupnicSecondary(ifname) : p->setupnicPrimary(ifname);
-}
-
-int ec_closenic(void)
-{
-	return ecx_portt::getInstance()->closenic();
-}
-
-int ec_getindex(void)
-{
-	return ecx_portt::getInstance()->getindex();
-}
-
-void ec_setbufstat(int idx, int bufstat)
-{
-	ecx_portt::getInstance()->setbufstat(idx, bufstat);
-}
-
-int ec_outframe(int idx, int stacknumber)
-{
-	return ecx_portt::getInstance()->outframe(idx, stacknumber);
-}
-
-int ec_outframe_red(int idx)
-{
-	return ecx_portt::getInstance()->outframe_red(idx);
-}
-
-int ec_inframe(int idx, int stacknumber)
-{
-	return ecx_portt::getInstance()->inframe(idx, stacknumber);
-}
-
-int ec_waitinframe(int idx, int timeout)
-{
-	return ecx_portt::getInstance()->waitinframe(idx, timeout);
-}
-
-int ec_srconfirm(int idx, int timeout)
-{
-	return ecx_portt::getInstance()->srconfirm(idx, timeout);
-}
-
-#endif
-//#ifdef EC_VER1
 class ec
 {
 public:
@@ -243,8 +199,18 @@ public:
 	static int LRD(uint32 LogAdr, uint16 length, void *data, int timeout);
 	static int LWR(uint32 LogAdr, uint16 length, void *data, int timeout);
 	static int LRWDC(uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int64 *DCtime, int timeout);
+	static int setupnic(const char *ifname, int secondary);
+	static int closenic(void);
+	static int getindex(void);
+	static void setbufstat(int idx, int bufstat);
+	static int outframe(int idx, int stacknumber);
+	static int outframe_red(int idx);
+	static int inframe(int idx, int stacknumber);
+	static int waitinframe(int idx, int timeout);
+	static int srconfirm(int idx, int timeout);
+	static void setupheader(void *p);
 };
-//#endif
+#endif
 
 
 #ifdef WIN32
@@ -263,58 +229,9 @@ public:
 
 #endif
 
-/** Redundancy modes */
-enum
-{
-	/** No redundancy, single NIC mode */
-	ECT_RED_NONE,
-	/** Double redundant NIC connecetion */
-	ECT_RED_DOUBLE
-};
 
-/** Primary source MAC address used for EtherCAT.
-* This address is not the MAC address used from the NIC.
-* EtherCAT does not care about MAC addressing, but it is used here to
-* differentiate the route the packet traverses through the EtherCAT
-* segment. This is needed to fund out the packet flow in redundant
-* confihurations. */
-const uint16 priMAC[3] = { 0x0101, 0x0101, 0x0101 };
-/** Secondary source MAC address used for EtherCAT. */
-const uint16 secMAC[3] = { 0x0404, 0x0404, 0x0404 };
 
-/** second MAC word is used for identification */
-#define RX_PRIM priMAC[1]
-/** second MAC word is used for identification */
-#define RX_SEC secMAC[1]
 
-static char errbuf[PCAP_ERRBUF_SIZE];
-
-static void ecx_clear_rxbufstat(int *rxbufstat)
-{
-	int i;
-	for (i = 0; i < EC_MAXBUF; i++)
-	{
-		rxbufstat[i] = EC_BUF_EMPTY;
-	}
-}
-
-/** Fill buffer with ethernet header structure.
-* Destination MAC is always broadcast.
-* Ethertype is always ETH_P_ECAT.
-* @param[out] p = buffer
-*/
-void ec_setupheader(void *p)
-{
-	EtherNetHeader *bp;
-	bp = static_cast<EtherNetHeader*>(p);
-	bp->da0 = htons(0xffff);
-	bp->da1 = htons(0xffff);
-	bp->da2 = htons(0xffff);
-	bp->sa0 = htons(priMAC[0]);
-	bp->sa1 = htons(priMAC[1]);
-	bp->sa2 = htons(priMAC[2]);
-	bp->etype = htons(ETH_P_ECAT);
-}
 
 
 

@@ -57,6 +57,39 @@
 #include "ethercattype.h"
 #include "ethercatbase.h"
 
+/** Redundancy modes */
+enum
+{
+	/** No redundancy, single NIC mode */
+	ECT_RED_NONE,
+	/** Double redundant NIC connecetion */
+	ECT_RED_DOUBLE
+};
+/** Primary source MAC address used for EtherCAT.
+* This address is not the MAC address used from the NIC.
+* EtherCAT does not care about MAC addressing, but it is used here to
+* differentiate the route the packet traverses through the EtherCAT
+* segment. This is needed to fund out the packet flow in redundant
+* confihurations. */
+const uint16 priMAC[3] = { 0x0101, 0x0101, 0x0101 };
+/** Secondary source MAC address used for EtherCAT. */
+const uint16 secMAC[3] = { 0x0404, 0x0404, 0x0404 };
+
+/** second MAC word is used for identification */
+#define RX_PRIM priMAC[1]
+/** second MAC word is used for identification */
+#define RX_SEC secMAC[1]
+
+static char errbuf[PCAP_ERRBUF_SIZE];
+
+static void ecx_clear_rxbufstat(int *rxbufstat)
+{
+	int i;
+	for (i = 0; i < EC_MAXBUF; i++)
+	{
+		rxbufstat[i] = EC_BUF_EMPTY;
+	}
+}
 
 /** Generate and set EtherCAT datagram in a standard ethernet frame.
  *
@@ -667,10 +700,10 @@ int ecx_portt::setupnic(const char *ifname, pcap_t **psock)
 
 	for (int i = 0; i < EC_MAXBUF; i++)
 	{
-		ec_setupheader(&(this->txbuf[i]));
+		ec::setupheader(&(this->txbuf[i]));
 		this->rxbufstat[i] = EC_BUF_EMPTY;
 	}
-	ec_setupheader(&(this->txbuf2));
+	ec::setupheader(&(this->txbuf2));
 
 	return 1;
 }
@@ -1112,7 +1145,7 @@ int ecx_portt::srconfirm(int idx, int timeout)
 	/* if nothing received, clear buffer index status so it can be used again */
 	if (wkc <= EC_NOFRAME)
 	{
-		ec_setbufstat(idx, EC_BUF_EMPTY);
+		ec::setbufstat(idx, EC_BUF_EMPTY);
 	}
 
 	return wkc;
@@ -1310,4 +1343,72 @@ int ec::LRWDC(uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int64 *DCti
 {
 	return ecx_portt::getInstance()->LRWDC(LogAdr, length, data, DCrs, DCtime, timeout);
 }
+int ec::setupnic(const char *ifname, int secondary)
+{
+	ecx_portt* p = ecx_portt::getInstance();
+	return secondary ? p->setupnicSecondary(ifname) : p->setupnicPrimary(ifname);
+}
+
+int ec::closenic(void)
+{
+	return ecx_portt::getInstance()->closenic();
+}
+
+int ec::getindex(void)
+{
+	return ecx_portt::getInstance()->getindex();
+}
+
+void ec::setbufstat(int idx, int bufstat)
+{
+	ecx_portt::getInstance()->setbufstat(idx, bufstat);
+}
+
+int ec::outframe(int idx, int stacknumber)
+{
+	return ecx_portt::getInstance()->outframe(idx, stacknumber);
+}
+
+int ec::outframe_red(int idx)
+{
+	return ecx_portt::getInstance()->outframe_red(idx);
+}
+
+int ec::inframe(int idx, int stacknumber)
+{
+	return ecx_portt::getInstance()->inframe(idx, stacknumber);
+}
+
+int ec::waitinframe(int idx, int timeout)
+{
+	return ecx_portt::getInstance()->waitinframe(idx, timeout);
+}
+
+int ec::srconfirm(int idx, int timeout)
+{
+	return ecx_portt::getInstance()->srconfirm(idx, timeout);
+}
+
+/** Fill buffer with ethernet header structure.
+* Destination MAC is always broadcast.
+* Ethertype is always ETH_P_ECAT.
+* @param[out] p = buffer
+*/
+void ec::setupheader(void *p)
+{
+	EtherNetHeader *bp;
+	bp = static_cast<EtherNetHeader*>(p);
+	bp->da0 = htons(0xffff);
+	bp->da1 = htons(0xffff);
+	bp->da2 = htons(0xffff);
+	bp->sa0 = htons(priMAC[0]);
+	bp->sa1 = htons(priMAC[1]);
+	bp->sa2 = htons(priMAC[2]);
+	bp->etype = htons(ETH_P_ECAT);
+}
+
+
+
+
+
 #endif

@@ -5734,7 +5734,7 @@ int ec_init(const char * ifname)
  */
 int ec_init_redundant(const char *ifname, char *if2name)
 {
-	return ecx_contextt::getInstance()->init_redundant(&ecx_redport, ifname, if2name);
+	return ecx_contextt::getInstance()->init_redundant(ecx_redportt::getInstance(), ifname, if2name);
 }
 
 /** Close lib.

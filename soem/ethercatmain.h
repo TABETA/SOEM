@@ -353,12 +353,12 @@ PACKED_END
 
 /** ALstatus and ALstatus code */
 PACKED_BEGIN
-typedef struct PACKED
+struct ec_alstatust PACKED
 {
    uint16  alstatus;
    uint16  unused;
    uint16  alstatuscode;
-} ec_alstatust;
+};
 PACKED_END
 
 /** stack structure to store segmented LRD/LWR/LRW constructs */
