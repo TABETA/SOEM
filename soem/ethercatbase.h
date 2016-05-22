@@ -53,7 +53,7 @@
 #include <Packet32.h>
 
 /** pointer structure to Tx and Rx stacks */
-typedef struct
+struct ec_stackT
 {
 	/** socket connection used */
 	pcap_t      **sock;
@@ -69,7 +69,7 @@ typedef struct
 	int(*rxbufstat)[EC_MAXBUF];
 	/** received MAC source address (middle word) */
 	int(*rxsa)[EC_MAXBUF];
-} ec_stackT;
+};
 
 /** pointer structure to buffers for redundant port */
 struct ecx_redportt
@@ -95,14 +95,16 @@ private:
 
 	int recvpkt(int stacknumber);
 	int waitinframe_red(int idx, osal_timert *timer);
+	int setupnic(const char *ifname, pcap_t **psock);
 public:
 	static ecx_portt* getInstance()
 	{
 		static ecx_portt ins;
 		return &ins;
 	}
-
+	int setupdatagram(uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data);
 	int setupdatagram(void *frame, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data);
+	int adddatagram(uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data);
 	int adddatagram(void *frame, uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data);
 	int BWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
 	int BRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout);
@@ -120,7 +122,9 @@ public:
 	int LRD(uint32 LogAdr, uint16 length, void *data, int timeout);
 	int LWR(uint32 LogAdr, uint16 length, void *data, int timeout);
 	int LRWDC(uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int64 *DCtime, int timeout);
-	int setupnic(const char *ifname, int secondary);
+	int init_redundant(ecx_redportt *redport, const char *ifname, char *if2name);
+	int setupnicSecondary(const char *ifname);
+	int setupnicPrimary(const char *ifname);
 	int closenic();
 	int getindex();
 	void setbufstat(int idx, int bufstat);
@@ -129,7 +133,8 @@ public:
 	int inframe(int idx, int stacknumber);
 	int waitinframe(int idx, int timeout);
 	int srconfirm(int idx, int timeout);
-	static void writedatagramdata(void *datagramdata, ec_cmdtype com, uint16 length, const void * data);
+	int FPRD_multi(int n, uint16 *configlst, ec_alstatust *slstatlst, int timeout);
+	void receive_processdata(int idx, uint16 DCtO, uint16 DCl, uint16 stacklen, int wkc2, void* stackdata, int64* DCtime, int* wkc, int *valid_wkc, boolean* first);
 
 private:
 	ec_stackT   stack;
@@ -171,7 +176,8 @@ extern ecx_redportt  ecx_redport;
 
 int ec_setupnic(const char *ifname, int secondary)
 {
-	return ecx_portt::getInstance()->setupnic(ifname, secondary);
+	ecx_portt* p = ecx_portt::getInstance();
+	return secondary ? p->setupnicSecondary(ifname) : p->setupnicPrimary(ifname);
 }
 
 int ec_closenic(void)
@@ -299,8 +305,8 @@ static void ecx_clear_rxbufstat(int *rxbufstat)
 */
 void ec_setupheader(void *p)
 {
-	ec_etherheadert *bp;
-	bp = static_cast<ec_etherheadert*>(p);
+	EtherNetHeader *bp;
+	bp = static_cast<EtherNetHeader*>(p);
 	bp->da0 = htons(0xffff);
 	bp->da1 = htons(0xffff);
 	bp->da2 = htons(0xffff);

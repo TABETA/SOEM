@@ -40,7 +40,8 @@
  */
 
 #include "oshw.h"
-
+#include "WinSock2.h"
+#include "pcap.h"
 /**
  * Host to Network byte order (i.e. to big endian).
  *

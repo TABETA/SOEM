@@ -57,37 +57,6 @@
 #include "ethercattype.h"
 #include "ethercatbase.h"
 
-/** Write data to EtherCAT datagram.
- *
- * @param[out] datagramdata   = data part of datagram
- * @param[in]  com            = command
- * @param[in]  length         = length of databuffer
- * @param[in]  data           = databuffer to be copied into datagram
- */
-void ecx_portt::writedatagramdata(void *datagramdata, ec_cmdtype com, uint16 length, const void * data)
-{
-	if (length > 0)
-	{
-			switch (com)
-			{
-				case EC_CMD_NOP:
-						/* Fall-through */
-				case EC_CMD_APRD:
-						/* Fall-through */
-				case EC_CMD_FPRD:
-						/* Fall-through */
-				case EC_CMD_BRD:
-						/* Fall-through */
-				case EC_CMD_LRD:
-						/* no data to write. initialise data so frame is in a known state */
-						memset(datagramdata, 0, length);
-						break;
-				default:
-						memcpy(datagramdata, data, length);
-						break;
-			}
-	}
-}
 
 /** Generate and set EtherCAT datagram in a standard ethernet frame.
  *
@@ -103,29 +72,140 @@ void ecx_portt::writedatagramdata(void *datagramdata, ec_cmdtype com, uint16 len
  */
 int ecx_portt::setupdatagram(void *frame, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data)
 {
-	ec_comt *datagramP;
-	uint8 *frameP;
+	void* p = static_cast<uint8 *>(frame)+sizeof(EtherNetHeader);
+	/* Ethernet header is preset and fixed in frame buffers EtherCAT header needs to be added after that */
+	p = EC_Header::set(p, com, idx, ADP, ADO, length);
 
-	frameP = static_cast<uint8 *>(frame);
-	/* Ethernet header is preset and fixed in frame buffers
-			EtherCAT header needs to be added after that */
-	datagramP = (ec_comt*)&frameP[ETH_HEADERSIZE];
-	datagramP->elength = htoes(EC_ECATTYPE + EC_HEADERSIZE + length);
-	datagramP->command = com;
-	datagramP->index = idx;
-	datagramP->ADP = htoes(ADP);
-	datagramP->ADO = htoes(ADO);
-	datagramP->dlength = htoes(length);
-	writedatagramdata(&frameP[ETH_HEADERSIZE + EC_HEADERSIZE], static_cast<ec_cmdtype>(com), length, data);
+	p = ec_bufT::writedatagramdata(static_cast<ec_bufT*>(p), static_cast<ec_cmdtype>(com), length, data);
+
 	/* set WKC to zero */
-	frameP[ETH_HEADERSIZE + EC_HEADERSIZE + length] = 0x00;
-	frameP[ETH_HEADERSIZE + EC_HEADERSIZE + length + 1] = 0x00;
+	p = WorkCounter::clear(p);
+
 	/* set size of frame in buffer array */
-	this->txbuflength[idx] = ETH_HEADERSIZE + EC_HEADERSIZE + EC_WKCSIZE + length;
+	txbuflength[idx] = static_cast<uint8*>(p)-static_cast<uint8*>(frame);
 
 	return 0;
 }
+uint16 EC_Header::getElength()
+{
+	return etohs(elength_) & 0x0fff;
+}
+void* EC_Header::set(void *ecatHeader, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length)
+{
+	EC_Header* self = static_cast<EC_Header*>(ecatHeader);
+	self->elength_ = htoes(EC_ECATTYPE + sizeof(EC_Header)+length);
+	self->command_ = com;
+	self->index_ = idx;
+	self->ADP_ = htoes(ADP);
+	self->ADO_ = htoes(ADO);
+	self->dlength_ = htoes(length);
+	//return self + 1;
+	return static_cast<uint8*>(ecatHeader) + sizeof(EC_Header);
+}
+void* EC_Header::add(void *ecatHeader, uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, int prevlength)
+{
+	EC_Header* self = static_cast<EC_Header*>(ecatHeader);
+	/* add new datagram to ethernet frame size */
+	self->elength_ = htoes(etohs(self->elength_) + sizeof(EC_Header)+length);
+	/* add "datagram follows" flag to previous subframe dlength */
+	self->dlength_ = htoes(etohs(self->dlength_) | EC_DATAGRAMFOLLOWS);
+	/* set new EtherCAT header position */
 
+	size_t offset = (prevlength - sizeof(EtherNetHeader)) - sizeof(self->elength_);
+	self = reinterpret_cast<EC_Header*>(static_cast<uint8*>(ecatHeader)+offset);
+	self->command_ = com;
+	self->index_ = idx;
+	self->ADP_ = htoes(ADP);
+	self->ADO_ = htoes(ADO);
+	if (more)
+	{
+		/* this is not the last datagram to add */
+		self->dlength_ = htoes(length | EC_DATAGRAMFOLLOWS);
+	}
+	else
+	{
+		/* this is the last datagram in the frame */
+		self->dlength_ = htoes(length);
+	}
+	return reinterpret_cast<uint8*>(self)+sizeof(EC_Header);
+}
+/** Write data to EtherCAT datagram.
+*
+* @param[out] datagramdata   = data part of datagram
+* @param[in]  com            = command
+* @param[in]  length         = length of databuffer
+* @param[in]  data           = databuffer to be copied into datagram
+*/
+void* ec_bufT::writedatagramdata(void *datagramdata, ec_cmdtype com, uint16 length, const void * data)
+{
+	if (length > 0)
+	{
+		switch (com)
+		{
+		case EC_CMD_NOP:
+			/* Fall-through */
+		case EC_CMD_APRD:
+			/* Fall-through */
+		case EC_CMD_FPRD:
+			/* Fall-through */
+		case EC_CMD_BRD:
+			/* Fall-through */
+		case EC_CMD_LRD:
+			/* no data to write. initialise data so frame is in a known state */
+			memset(datagramdata, 0, length);
+			break;
+		default:
+			memcpy(datagramdata, data, length);
+			break;
+		}
+	}
+	return static_cast<uint8*>(datagramdata)+length;
+}
+ec_cmdtype ec_bufT::getCommand()const
+{
+	const EC_Header*  header = reinterpret_cast<const EC_Header* >(this);
+	return header->getCommand();
+}
+void ec_bufT::copyHeader(void *dst, size_t datalength)const
+{
+	memcpy(dst, &(buf_[sizeof(EC_Header)]), datalength);
+}
+int ec_bufT::getWorkCounterFromTempBuf(size_t elength)const
+{
+	return (buf_[elength] + (static_cast<uint16>(buf_[elength + 1]) << 8));
+}
+int ec_bufT::getWorkCounter(size_t datalength)const
+{
+	int dst = 0;
+	memcpy(&dst, &(buf_[sizeof(EC_Header)+datalength]), sizeof(WorkCounter));
+	return dst;
+}
+int64 ec_bufT::getDCTime(size_t DCtO)const
+{
+	uint64 DCtE = 0;
+	memcpy(&DCtE, &(buf_[DCtO]), sizeof(int64));
+	return etohll(DCtE);
+}
+int ec_bufT::setupdatagram(uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data, int* txbuflength)
+{
+	void* p = reinterpret_cast<uint8 *>(this) + sizeof(EtherNetHeader);
+	/* Ethernet header is preset and fixed in frame buffers EtherCAT header needs to be added after that */
+	p = EC_Header::set(p, com, idx, ADP, ADO, length);
+
+	p = ec_bufT::writedatagramdata(static_cast<ec_bufT*>(p), static_cast<ec_cmdtype>(com), length, data);
+
+	/* set WKC to zero */
+	p = WorkCounter::clear(p);
+
+	/* set size of frame in buffer array */
+	*txbuflength = static_cast<uint8*>(p)-reinterpret_cast<uint8*>(this);
+
+	return 0;
+}
+int ecx_portt::setupdatagram(uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data)
+{
+	return txbuf[idx].setupdatagram(com, idx, ADP, ADO, length, data, &txbuflength[idx]);
+}
 /** Add EtherCAT datagram to a standard ethernet frame with existing datagram(s).
  *
  * @param[in] port        = port context struct
@@ -141,46 +221,48 @@ int ecx_portt::setupdatagram(void *frame, uint8 com, uint8 idx, uint16 ADP, uint
  */
 int ecx_portt::adddatagram(void *frame, uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data)
 {
-	ec_comt *datagramP;
-	uint8 *frameP;
-	uint16 prevlength;
-
-	frameP = static_cast<uint8 *>(frame);
+	
 	/* copy previous frame size */
-	prevlength = this->txbuflength[idx];
-	datagramP = (ec_comt*)&frameP[ETH_HEADERSIZE];
-	/* add new datagram to ethernet frame size */
-	datagramP->elength = htoes( etohs(datagramP->elength) + EC_HEADERSIZE + length );
-	/* add "datagram follows" flag to previous subframe dlength */
-	datagramP->dlength = htoes( etohs(datagramP->dlength) | EC_DATAGRAMFOLLOWS );
-	/* set new EtherCAT header position */
-	datagramP = (ec_comt*)&frameP[prevlength - EC_ELENGTHSIZE];
-	datagramP->command = com;
-	datagramP->index = idx;
-	datagramP->ADP = htoes(ADP);
-	datagramP->ADO = htoes(ADO);
-	if (more)
-	{
-			/* this is not the last datagram to add */
-			datagramP->dlength = htoes(length | EC_DATAGRAMFOLLOWS);
-	}
-	else
-	{
-			/* this is the last datagram in the frame */
-			datagramP->dlength = htoes(length);
-	}
-	writedatagramdata(&frameP[prevlength + EC_HEADERSIZE - EC_ELENGTHSIZE], static_cast<ec_cmdtype>(com), length, data);
+	void* p = static_cast<uint8 *>(frame)+sizeof(EtherNetHeader);
+	uint16 prevlength = txbuflength[idx];
+	int rval = static_cast<uint8*>(p)-static_cast<uint8*>(frame);
+	p = EC_Header::add(p, com, idx, more, ADP, ADO, length, prevlength);
+
+
+	p = ec_bufT::writedatagramdata(p, static_cast<ec_cmdtype>(com), length, data);
 	/* set WKC to zero */
-	frameP[prevlength + EC_HEADERSIZE - EC_ELENGTHSIZE + length] = 0x00;
-	frameP[prevlength + EC_HEADERSIZE - EC_ELENGTHSIZE + length + 1] = 0x00;
+	p = WorkCounter::clear(p);
 	/* set size of frame in buffer array */
-	this->txbuflength[idx] = prevlength + EC_HEADERSIZE - EC_ELENGTHSIZE + EC_WKCSIZE + length;
+	txbuflength[idx] = static_cast<uint8*>(p)-static_cast<uint8*>(frame);
 
 	/* return offset to data in rx frame
 			14 bytes smaller than tx frame due to stripping of ethernet header */
-	return prevlength + EC_HEADERSIZE - EC_ELENGTHSIZE - ETH_HEADERSIZE;
+	return rval;
 }
 
+int ecx_portt::adddatagram(uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data)
+{
+	return txbuf[idx].adddatagram(com, idx, more, ADP, ADO, length, data, &txbuflength[idx]);
+}
+
+int ec_bufT::adddatagram(uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data, int* txbuflength)
+{
+	/* copy previous frame size */
+	void* p = reinterpret_cast<uint8*>(this) + sizeof(EtherNetHeader);
+	uint16 prevlength = *txbuflength;
+	int rval = static_cast<uint8*>(p)-reinterpret_cast<uint8*>(this);
+	p = EC_Header::add(p, com, idx, more, ADP, ADO, length, prevlength);
+
+	p = ec_bufT::writedatagramdata(p, static_cast<ec_cmdtype>(com), length, data);
+	/* set WKC to zero */
+	p = WorkCounter::clear(p);
+	/* set size of frame in buffer array */
+	*txbuflength = static_cast<uint8*>(p)-reinterpret_cast<uint8*>(this);
+
+	/* return offset to data in rx frame
+	14 bytes smaller than tx frame due to stripping of ethernet header */
+	return rval;
+}
 /** BRW "broadcast write" primitive. Blocking.
  *
  * @param[in] port        = port context struct
@@ -199,7 +281,7 @@ int ecx_portt::BWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeou
 	/* get fresh index */
 	idx = getindex();
 	/* setup datagram */
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_BWR, idx, ADP, ADO, length, data);
+	setupdatagram(&(txbuf[idx]), EC_CMD_BWR, idx, ADP, ADO, length, data);
 	/* send data and wait for answer */
 	wkc = srconfirm(idx, timeout);
 	/* clear buffer status */
@@ -226,13 +308,13 @@ int ecx_portt::BRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeou
 	/* get fresh index */
 	idx = getindex();
 	/* setup datagram */
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_BRD, idx, ADP, ADO, length, data);
+	setupdatagram(EC_CMD_BRD, idx, ADP, ADO, length, data);
 	/* send data and wait for answer */
 	wkc = srconfirm(idx, timeout);
 	if (wkc > 0)
 	{
-			/* copy datagram to data buffer */
-			memcpy(data, &(this->rxbuf[idx][EC_HEADERSIZE]), length);
+		/* copy datagram to data buffer */
+		rxbuf[idx].copyHeader(data, length);
 	}
 	/* clear buffer status */
 	setbufstat(idx, EC_BUF_EMPTY);
@@ -256,11 +338,11 @@ int ecx_portt::APRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeo
 	uint8 idx;
 
 	idx = getindex();
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_APRD, idx, ADP, ADO, length, data);
+	setupdatagram(EC_CMD_APRD, idx, ADP, ADO, length, data);
 	wkc = srconfirm(idx, timeout);
 	if (wkc > 0)
 	{
-			memcpy(data, &(this->rxbuf[idx][EC_HEADERSIZE]), length);
+		rxbuf[idx].copyHeader(data, length);
 	}
 	setbufstat(idx, EC_BUF_EMPTY);
 
@@ -284,11 +366,11 @@ int ecx_portt::ARMW(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeo
 	uint8 idx;
 
 	idx = getindex();
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_ARMW, idx, ADP, ADO, length, data);
+	setupdatagram(&(txbuf[idx]), EC_CMD_ARMW, idx, ADP, ADO, length, data);
 	wkc = srconfirm(idx, timeout);
 	if (wkc > 0)
 	{
-			memcpy(data, &(this->rxbuf[idx][EC_HEADERSIZE]), length);
+		rxbuf[idx].copyHeader(data, length);
 	}
 	setbufstat(idx, EC_BUF_EMPTY);
 
@@ -312,11 +394,11 @@ int ecx_portt::FRMW(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeo
 	uint8 idx;
 
 	idx = getindex();
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_FRMW, idx, ADP, ADO, length, data);
+	setupdatagram(&(txbuf[idx]), EC_CMD_FRMW, idx, ADP, ADO, length, data);
 	wkc = srconfirm(idx, timeout);
 	if (wkc > 0)
 	{
-			memcpy(data, &(this->rxbuf[idx][EC_HEADERSIZE]), length);
+		rxbuf[idx].copyHeader(data, length);
 	}
 	setbufstat(idx, EC_BUF_EMPTY);
 
@@ -357,11 +439,11 @@ int ecx_portt::FPRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeo
 	uint8 idx;
 
 	idx = getindex();
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_FPRD, idx, ADP, ADO, length, data);
+	setupdatagram(&(txbuf[idx]), EC_CMD_FPRD, idx, ADP, ADO, length, data);
 	wkc = srconfirm(idx, timeout);
 	if (wkc > 0)
 	{
-			memcpy(data, &(this->rxbuf[idx][EC_HEADERSIZE]), length);
+		rxbuf[idx].copyHeader(data, length);
 	}
 	setbufstat(idx, EC_BUF_EMPTY);
 
@@ -401,7 +483,7 @@ int ecx_portt::APWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeo
 	int wkc;
 
 	idx = getindex();
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_APWR, idx, ADP, ADO, length, data);
+	setupdatagram(&(txbuf[idx]), EC_CMD_APWR, idx, ADP, ADO, length, data);
 	wkc = srconfirm(idx, timeout);
 	setbufstat(idx, EC_BUF_EMPTY);
 
@@ -438,7 +520,7 @@ int ecx_portt::FPWR(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeo
 	uint8 idx;
 
 	idx = getindex();
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_FPWR, idx, ADP, ADO, length, data);
+	setupdatagram(&(txbuf[idx]), EC_CMD_FPWR, idx, ADP, ADO, length, data);
 	wkc = srconfirm(idx, timeout);
 	setbufstat(idx, EC_BUF_EMPTY);
 
@@ -474,11 +556,11 @@ int ecx_portt::LRW(uint32 LogAdr, uint16 length, void *data, int timeout)
 	int wkc;
 
 	idx = getindex();
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_LRW, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
+	setupdatagram(&(txbuf[idx]), EC_CMD_LRW, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
 	wkc = srconfirm(idx, timeout);
-	if ((wkc > 0) && (this->rxbuf[idx][EC_CMDOFFSET] == EC_CMD_LRW))
+	if ((wkc > 0) && (rxbuf[idx].getCommand() == EC_CMD_LRW))
 	{
-			memcpy(data, &(this->rxbuf[idx][EC_HEADERSIZE]), length);
+		rxbuf[idx].copyHeader(data, length);
 	}
 	setbufstat(idx, EC_BUF_EMPTY);
 
@@ -500,11 +582,11 @@ int ecx_portt::LRD(uint32 LogAdr, uint16 length, void *data, int timeout)
 	int wkc;
 
 	idx = getindex();
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_LRD, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
+	setupdatagram(&(txbuf[idx]), EC_CMD_LRD, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
 	wkc = srconfirm(idx, timeout);
-	if ((wkc > 0) && (this->rxbuf[idx][EC_CMDOFFSET]==EC_CMD_LRD))
+	if ((wkc > 0) && (rxbuf[idx].getCommand() == EC_CMD_LRD))
 	{
-			memcpy(data, &(this->rxbuf[idx][EC_HEADERSIZE]), length);
+		rxbuf[idx].copyHeader(data, length);
 	}
 	setbufstat(idx, EC_BUF_EMPTY);
 
@@ -526,7 +608,7 @@ int ecx_portt::LWR(uint32 LogAdr, uint16 length, void *data, int timeout)
 	int wkc;
 
 	idx = getindex();
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_LWR, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
+	txbuf[idx].setupdatagram(EC_CMD_LWR, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data, &txbuflength[idx]);
 	wkc = srconfirm(idx, timeout);
 	setbufstat(idx, EC_BUF_EMPTY);
 
@@ -547,24 +629,19 @@ int ecx_portt::LWR(uint32 LogAdr, uint16 length, void *data, int timeout)
  */
 int ecx_portt::LRWDC(uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int64 *DCtime, int timeout)
 {
-	uint16 DCtO;
-	uint8 idx;
-	int wkc;
-	uint64 DCtE;
-
-	idx = getindex();
+	uint8 idx = getindex();
 	/* LRW in first datagram */
-	setupdatagram(&(this->txbuf[idx]), EC_CMD_LRW, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
+	setupdatagram(&(txbuf[idx]), EC_CMD_LRW, idx, LO_WORD(LogAdr), HI_WORD(LogAdr), length, data);
 	/* FPRMW in second datagram */
-	DCtE = htoell(*DCtime);
-	DCtO = adddatagram(&(this->txbuf[idx]), EC_CMD_FRMW, idx, FALSE, DCrs, ECT_REG_DCSYSTIME, sizeof(DCtime), &DCtE);
-	wkc = srconfirm(idx, timeout);
-	if ((wkc > 0) && (this->rxbuf[idx][EC_CMDOFFSET] == EC_CMD_LRW))
+	uint64 DCtE = htoell(*DCtime);
+	uint16 DCtO = adddatagram(EC_CMD_FRMW, idx, FALSE, DCrs, ECT_REG_DCSYSTIME, sizeof(DCtime), &DCtE);
+	int wkc = srconfirm(idx, timeout);
+	if ((wkc > 0) && (rxbuf[idx].getCommand() == EC_CMD_LRW))
 	{
-			memcpy(data, &(this->rxbuf[idx][EC_HEADERSIZE]), length);
-			memcpy(&wkc, &(this->rxbuf[idx][EC_HEADERSIZE + length]), EC_WKCSIZE);
-			memcpy(&DCtE, &(this->rxbuf[idx][DCtO]), sizeof(*DCtime));
-			*DCtime = etohll(DCtE);
+		rxbuf[idx].copyHeader(data, length);
+		wkc = rxbuf[idx].getWorkCounter(length);
+		*DCtime = rxbuf[idx].getDCTime(DCtO);
+		
 	}
 	setbufstat(idx, EC_BUF_EMPTY);
 
@@ -576,54 +653,8 @@ int ecx_portt::LRWDC(uint32 LogAdr, uint16 length, void *data, uint16 DCrs, int6
 * @param[in] secondary      = if >0 then use secondary stack instead of primary
 * @return >0 if succeeded
 */
-int ecx_portt::setupnic(const char *ifname, int secondary)
+int ecx_portt::setupnic(const char *ifname, pcap_t **psock)
 {
-	int i, rval;
-	pcap_t **psock;
-
-	rval = 0;
-	if (secondary)
-	{
-		/* secondary port struct available? */
-		if (this->redport)
-		{
-			/* when using secondary socket it is automatically a redundant setup */
-			psock = &(this->redport->sockhandle);
-			*psock = NULL;
-			this->redstate = ECT_RED_DOUBLE;
-			this->redport->stack.sock = &(this->redport->sockhandle);
-			this->redport->stack.txbuf = &(this->txbuf);
-			this->redport->stack.txbuflength = &(this->txbuflength);
-			this->redport->stack.tempbuf = &(this->redport->tempinbuf);
-			this->redport->stack.rxbuf = &(this->redport->rxbuf);
-			this->redport->stack.rxbufstat = &(this->redport->rxbufstat);
-			this->redport->stack.rxsa = &(this->redport->rxsa);
-			ecx_clear_rxbufstat(&(this->redport->rxbufstat[0]));
-		}
-		else
-		{
-			/* fail */
-			return 0;
-		}
-	}
-	else
-	{
-		InitializeCriticalSection(&(this->getindex_mutex));
-		InitializeCriticalSection(&(this->tx_mutex));
-		InitializeCriticalSection(&(this->rx_mutex));
-		this->sockhandle = NULL;
-		this->lastidx = 0;
-		this->redstate = ECT_RED_NONE;
-		this->stack.sock = &(this->sockhandle);
-		this->stack.txbuf = &(this->txbuf);
-		this->stack.txbuflength = &(this->txbuflength);
-		this->stack.tempbuf = &(this->tempinbuf);
-		this->stack.rxbuf = &(this->rxbuf);
-		this->stack.rxbufstat = &(this->rxbufstat);
-		this->stack.rxsa = &(this->rxsa);
-		ecx_clear_rxbufstat(&(this->rxbufstat[0]));
-		psock = &(this->sockhandle);
-	}
 	/* we use pcap socket to send RAW packets in windows user mode*/
 	*psock = pcap_open(ifname, 65536, PCAP_OPENFLAG_PROMISCUOUS |
 		PCAP_OPENFLAG_MAX_RESPONSIVENESS |
@@ -634,7 +665,7 @@ int ecx_portt::setupnic(const char *ifname, int secondary)
 		return 0;
 	}
 
-	for (i = 0; i < EC_MAXBUF; i++)
+	for (int i = 0; i < EC_MAXBUF; i++)
 	{
 		ec_setupheader(&(this->txbuf[i]));
 		this->rxbufstat[i] = EC_BUF_EMPTY;
@@ -643,6 +674,67 @@ int ecx_portt::setupnic(const char *ifname, int secondary)
 
 	return 1;
 }
+int ecx_portt::setupnicPrimary(const char *ifname)
+{
+	InitializeCriticalSection(&(this->getindex_mutex));
+	InitializeCriticalSection(&(this->tx_mutex));
+	InitializeCriticalSection(&(this->rx_mutex));
+	this->sockhandle = NULL;
+	this->lastidx = 0;
+	this->redstate = ECT_RED_NONE;
+	this->stack.sock = &(this->sockhandle);
+	this->stack.txbuf = &(this->txbuf);
+	this->stack.txbuflength = &(this->txbuflength);
+	this->stack.tempbuf = &(this->tempinbuf);
+	this->stack.rxbuf = &(this->rxbuf);
+	this->stack.rxbufstat = &(this->rxbufstat);
+	this->stack.rxsa = &(this->rxsa);
+	ecx_clear_rxbufstat(&(this->rxbufstat[0]));
+	return setupnic(ifname, &(this->sockhandle));
+}
+int ecx_portt::init_redundant(ecx_redportt *redport, const char *ifname, char *if2name)
+{
+
+	redport = redport;
+	setupnicPrimary(ifname);
+	int rval = setupnicSecondary(if2name);
+	/* prepare "dummy" BRD tx frame for redundant operation */
+	EtherNetHeader *ehp = (EtherNetHeader *)&(txbuf2);
+	ehp->sa1 = oshw_htons(secMAC[0]);
+	int zbuf = 0;
+	setupdatagram(&(txbuf2), EC_CMD_BRD, 0, 0x0000, 0x0000, 2, &zbuf);
+	txbuflength2 = sizeof(EtherNetHeader) + sizeof(EC_Header) + sizeof(WorkCounter) + 2;
+	return rval;
+}
+int ecx_portt::setupnicSecondary(const char *ifname)
+{
+	int rval = 0;
+	
+	/* secondary port struct available? */
+	if (this->redport)
+	{
+		/* when using secondary socket it is automatically a redundant setup */
+		pcap_t **psock = &(this->redport->sockhandle);
+		*psock = NULL;
+		this->redstate = ECT_RED_DOUBLE;
+		this->redport->stack.sock = &(this->redport->sockhandle);
+		this->redport->stack.txbuf = &(this->txbuf);
+		this->redport->stack.txbuflength = &(this->txbuflength);
+		this->redport->stack.tempbuf = &(this->redport->tempinbuf);
+		this->redport->stack.rxbuf = &(this->redport->rxbuf);
+		this->redport->stack.rxbufstat = &(this->redport->rxbufstat);
+		this->redport->stack.rxsa = &(this->redport->rxsa);
+		ecx_clear_rxbufstat(&(this->redport->rxbufstat[0]));
+		rval = setupnic(ifname, psock);
+	}
+	else
+	{
+		/* fail */
+	}
+	return rval;
+}
+
+
 /** Close sockets used
 * @param[in] port        = port context struct
 * @return 0
@@ -673,18 +765,15 @@ int ecx_portt::closenic()
 */
 int ecx_portt::getindex()
 {
-	int idx;
-	int cnt;
-
 	EnterCriticalSection(&(this->getindex_mutex));
 
-	idx = this->lastidx + 1;
+	int idx = this->lastidx + 1;
 	/* index can't be larger than buffer array */
 	if (idx >= EC_MAXBUF)
 	{
 		idx = 0;
 	}
-	cnt = 0;
+	int cnt = 0;
 	/* try to find unused index */
 	while ((this->rxbufstat[idx] != EC_BUF_EMPTY) && (cnt < EC_MAXBUF))
 	{
@@ -735,7 +824,7 @@ int ecx_portt::outframe(int idx, int stacknumber)
 		stack = &(this->redport->stack);
 	}
 	lp = (*stack->txbuflength)[idx];
-	rval = pcap_sendpacket(*stack->sock, (*stack->txbuf)[idx], lp);
+	rval = pcap_sendpacket(*stack->sock, reinterpret_cast<const u_char *>((*stack->txbuf)[idx].getEtherNetHeader()), lp);
 	(*stack->rxbufstat)[idx] = EC_BUF_TX;
 
 	return rval;
@@ -747,23 +836,19 @@ int ecx_portt::outframe(int idx, int stacknumber)
 */
 int ecx_portt::outframe_red(int idx)
 {
-	ec_comt *datagramP;
-	ec_etherheadert *ehp;
-	int rval;
-
-	ehp = (ec_etherheadert *)&(this->txbuf[idx]);
+	EtherNetHeader *ehp = txbuf[idx].getEtherNetHeader();
 	/* rewrite MAC source address 1 to primary */
 	ehp->sa1 = htons(priMAC[1]);
 	/* transmit over primary socket*/
-	rval = outframe(idx, 0);
+	int rval = outframe(idx, 0);
 	if (this->redstate != ECT_RED_NONE)
 	{
 		EnterCriticalSection(&(this->tx_mutex));
-		ehp = (ec_etherheadert *)&(this->txbuf2);
+		ehp = (EtherNetHeader *)&(this->txbuf2);
 		/* use dummy frame for secondary socket transmit (BRD) */
-		datagramP = (ec_comt*)&(this->txbuf2[ETH_HEADERSIZE]);
+		EC_Header *datagramP = txbuf2.getECATHeader();
 		/* write index to frame */
-		datagramP->index = idx;
+		datagramP->setIndex(idx);
 		/* rewrite MAC source address 1 to secondary */
 		ehp->sa1 = htons(secMAC[1]);
 		/* transmit over secondary socket */
@@ -793,30 +878,16 @@ int ecx_portt::outframe_red(int idx)
 */
 int ecx_portt::inframe(int idx, int stacknumber)
 {
-	uint16  l;
-	int     rval;
-	int     idxf;
-	ec_etherheadert *ehp;
-	ec_comt *ecp;
-	ec_stackT *stack;
-	ec_bufT *rxbuf;
-
-	if (!stacknumber)
-	{
-		stack = &(this->stack);
-	}
-	else
-	{
-		stack = &(this->redport->stack);
-	}
-	rval = EC_NOFRAME;
-	rxbuf = &(*stack->rxbuf)[idx];
+	ec_stackT *stack = (stacknumber == 0)?
+						&(this->stack):
+						&(this->redport->stack);
+	int rval = EC_NOFRAME;
+	ec_bufT *rxbuf = &(*stack->rxbuf)[idx];
 	/* check if requested index is already in buffer ? */
 	if ((idx < EC_MAXBUF) && ((*stack->rxbufstat)[idx] == EC_BUF_RCVD))
 	{
-		l = (*rxbuf)[0] + ((uint16)((*rxbuf)[1] & 0x0f) << 8);
 		/* return WKC */
-		rval = ((*rxbuf)[l] + ((uint16)(*rxbuf)[l + 1] << 8));
+		rval = rxbuf->retreive();
 		/* mark as completed */
 		(*stack->rxbufstat)[idx] = EC_BUF_COMPLETE;
 	}
@@ -827,41 +898,38 @@ int ecx_portt::inframe(int idx, int stacknumber)
 		if (recvpkt(stacknumber))
 		{
 			rval = EC_OTHERFRAME;
-			ehp = (ec_etherheadert*)(stack->tempbuf);
+			EtherNetHeader *ehp = stack->tempbuf->getEtherNetHeader();
 			/* check if it is an EtherCAT frame */
-			if (ehp->etype == htons(ETH_P_ECAT))
+			if (ehp->isEtherCATFrame())
 			{
-				ecp = (ec_comt*)(&(*stack->tempbuf)[ETH_HEADERSIZE]);
-				l = etohs(ecp->elength) & 0x0fff;
-				idxf = ecp->index;
+				EC_Header *ecp = stack->tempbuf->getECATHeader();
+				uint8 idxf = ecp->getIndex();
 				/* found index equals reqested index ? */
 				if (idxf == idx)
 				{
 					/* yes, put it in the buffer array (strip ethernet header) */
-					memcpy(rxbuf, &(*stack->tempbuf)[ETH_HEADERSIZE], (*stack->txbuflength)[idx] - ETH_HEADERSIZE);
+					memcpy(rxbuf, ecp, (*stack->txbuflength)[idx] - sizeof(EtherNetHeader));
 					/* return WKC */
-					rval = ((*rxbuf)[l] + ((uint16)((*rxbuf)[l + 1]) << 8));
+					uint16 l = ecp->getElength();
+					rval = rxbuf->getWorkCounterFromTempBuf(l);
 					/* mark as completed */
 					(*stack->rxbufstat)[idx] = EC_BUF_COMPLETE;
 					/* store MAC source word 1 for redundant routing info */
 					(*stack->rxsa)[idx] = ntohs(ehp->sa1);
 				}
+				/* check if index exist and someone is waiting for it */
+				else if(idxf < EC_MAXBUF && (*stack->rxbufstat)[idxf] == EC_BUF_TX)
+				{
+					rxbuf = &(*stack->rxbuf)[idxf];
+					/* put it in the buffer array (strip ethernet header) */
+					memcpy(rxbuf, ecp, (*stack->txbuflength)[idxf] - sizeof(EtherNetHeader));
+					/* mark as received */
+					(*stack->rxbufstat)[idxf] = EC_BUF_RCVD;
+					(*stack->rxsa)[idxf] = ntohs(ehp->sa1);
+				}
 				else
 				{
-					/* check if index exist and someone is waiting for it */
-					if (idxf < EC_MAXBUF && (*stack->rxbufstat)[idxf] == EC_BUF_TX)
-					{
-						rxbuf = &(*stack->rxbuf)[idxf];
-						/* put it in the buffer array (strip ethernet header) */
-						memcpy(rxbuf, &(*stack->tempbuf)[ETH_HEADERSIZE], (*stack->txbuflength)[idxf] - ETH_HEADERSIZE);
-						/* mark as received */
-						(*stack->rxbufstat)[idxf] = EC_BUF_RCVD;
-						(*stack->rxsa)[idxf] = ntohs(ehp->sa1);
-					}
-					else
-					{
-						/* strange things happend */
-					}
+					/* strange things happend */
 				}
 			}
 		}
@@ -880,34 +948,25 @@ int ecx_portt::inframe(int idx, int stacknumber)
 */
 int ecx_portt::recvpkt(int stacknumber)
 {
-	int lp, bytesrx;
-	ec_stackT *stack;
+	ec_stackT *stack = (stacknumber == 0)?
+						&(this->stack):
+						&(this->redport->stack);
+	int lp = sizeof(this->tempinbuf);
+
 	struct pcap_pkthdr * header;
-	unsigned char const * pkt_data;
-	int res;
-
-	if (!stacknumber)
-	{
-		stack = &(this->stack);
-	}
-	else
-	{
-		stack = &(this->redport->stack);
-	}
-	lp = sizeof(this->tempinbuf);
-
-	res = pcap_next_ex(*stack->sock, &header, &pkt_data);
+	const u_char * pkt_data;
+	int res = pcap_next_ex(*stack->sock, &header, &pkt_data);
 	if (res <= 0)
 	{
 		this->tempinbufs = 0;
 		return 0;
 	}
-	bytesrx = header->len;
+	int bytesrx = header->len;
 	if (bytesrx > lp)
 	{
 		bytesrx = lp;
 	}
-	memcpy(*stack->tempbuf, pkt_data, bytesrx);
+	memcpy(stack->tempbuf->head(), pkt_data, bytesrx);
 	this->tempinbufs = bytesrx;
 	return (bytesrx > 0);
 }
@@ -962,7 +1021,7 @@ int ecx_portt::waitinframe_red(int idx, osal_timert *timer)
 		if (((primrx == RX_SEC) && (secrx == RX_PRIM)))
 		{
 			/* copy secondary buffer to primary */
-			memcpy(&(this->rxbuf[idx]), &(this->redport->rxbuf[idx]), this->txbuflength[idx] - ETH_HEADERSIZE);
+			memcpy(&(this->rxbuf[idx]), &(this->redport->rxbuf[idx]), this->txbuflength[idx] - sizeof(EtherNetHeader));
 			wkc = wkc2;
 		}
 		/* primary socket got nothing or primary frame, and secondary socket got secondary frame */
@@ -976,7 +1035,7 @@ int ecx_portt::waitinframe_red(int idx, osal_timert *timer)
 			if ((primrx == RX_PRIM) && (secrx == RX_SEC))
 			{
 				/* copy primary rx to tx buffer */
-				memcpy(&(this->txbuf[idx][ETH_HEADERSIZE]), &(this->rxbuf[idx]), this->txbuflength[idx] - ETH_HEADERSIZE);
+				memcpy(this->txbuf[idx].getECATHeader(), &(this->rxbuf[idx]), this->txbuflength[idx] - sizeof(EtherNetHeader));
 			}
 			osal_timer_start(&timer2, EC_TIMEOUTRET);
 			/* resend secondary tx */
@@ -989,7 +1048,7 @@ int ecx_portt::waitinframe_red(int idx, osal_timert *timer)
 			if (wkc2 > EC_NOFRAME)
 			{
 				/* copy secondary result to primary rx buffer */
-				memcpy(&(this->rxbuf[idx]), &(this->redport->rxbuf[idx]), this->txbuflength[idx] - ETH_HEADERSIZE);
+				memcpy(&(this->rxbuf[idx]), &(this->redport->rxbuf[idx]), this->txbuflength[idx] - sizeof(EtherNetHeader));
 				wkc = wkc2;
 			}
 		}
@@ -1058,11 +1117,105 @@ int ecx_portt::srconfirm(int idx, int timeout)
 
 	return wkc;
 }
-#ifdef EC_VER1
-int ec::setupdatagram(void *frame, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data)
+
+#define MAX_FPRD_MULTI 64
+int ecx_portt::FPRD_multi(int n, uint16 *configlst, ec_alstatust *slstatlst, int timeout)
 {
-	return ecx_portt::getInstance()->setupdatagram (frame, com, idx, ADP, ADO, length, data);
+	int sldatapos[MAX_FPRD_MULTI];
+
+	uint8 idx = getindex();
+	for (int slcnt = 0; slcnt < n; ++slcnt)
+	{
+		if (slcnt == 0)
+		{
+			txbuf[idx].setupdatagram(EC_CMD_FPRD, idx,
+				*(configlst + slcnt), ECT_REG_ALSTAT, sizeof(ec_alstatust), slstatlst + slcnt, &txbuflength[idx]);
+			sldatapos[slcnt] = sizeof(EC_Header);
+		}
+		else
+		{
+			boolean more = (slcnt == n - 1) ? FALSE : TRUE;
+			sldatapos[slcnt] = txbuf[idx].adddatagram(EC_CMD_FPRD, idx, more,
+				*(configlst + slcnt), ECT_REG_ALSTAT, sizeof(ec_alstatust), slstatlst + slcnt, &txbuflength[idx]);
+		}
+	}
+	int wkc = srconfirm(idx, timeout);
+	if (wkc >= 0)
+	{
+		for (int slcnt = 0; slcnt < n; slcnt++)
+		{
+			memcpy(slstatlst + slcnt, (static_cast<uint8*>(rxbuf[idx].head()) + sldatapos[slcnt]), sizeof(ec_alstatust));
+		}
+	}
+	setbufstat(idx, EC_BUF_EMPTY);
+	return wkc;
 }
+void ecx_portt::receive_processdata(int idx, uint16 DCtO, uint16 DCl, uint16 stacklen, int wkc2, void* stackdata, int64* DCtime, int* wkc, int *valid_wkc, boolean* first)
+{
+	rxbuf[idx].receive_processdata(DCtO, DCl, stacklen, wkc2, stackdata, DCtime, wkc, valid_wkc, first);
+}
+boolean EtherNetHeader::isEtherCATFrame()const
+{
+	return etype == htons(ETH_P_ECAT);
+}
+
+void ec_bufT::receive_processdata(uint16 DCtO, uint16 DCl, uint16 stacklen, int wkc2, void* stackdata, int64* DCtime, int* wkc, int *valid_wkc, boolean* first)
+{
+	ec_cmdtype command = getCommand();
+
+	switch (command)
+	{
+	case EC_CMD_LRD:/* fall-through */
+	case EC_CMD_LRW:
+		if (*first)
+		{
+			uint16 le_wkc = 0;
+			memcpy(stackdata, &(buf_[sizeof(EC_Header)]), DCl);
+			memcpy(&le_wkc, &(buf_[sizeof(EC_Header) + DCl]), sizeof(WorkCounter));
+			*wkc = etohs(le_wkc);
+			int64 le_DCtime = 0;
+			memcpy(&le_DCtime, &(buf_[DCtO]), sizeof(le_DCtime));
+			*(DCtime) = etohll(le_DCtime);
+			*first = FALSE;
+		}
+		else
+		{
+			/* copy input data back to process data buffer */
+			memcpy(stackdata, &(buf_[sizeof(EC_Header)]), stacklen);
+			*wkc += wkc2;
+		}
+		*valid_wkc = 1;
+		break;
+	case EC_CMD_LWR:
+		if (*first)
+		{
+			uint16 le_wkc = 0;
+			memcpy(&le_wkc, &(buf_[sizeof(EC_Header) + DCl]), sizeof(WorkCounter));
+			/* output WKC counts 2 times when using LRW, emulate the same for LWR */
+			*wkc = etohs(le_wkc) * 2;
+			int64 le_DCtime = 0;
+			memcpy(&le_DCtime, &(buf_[DCtO]), sizeof(le_DCtime));
+			*(DCtime) = etohll(le_DCtime);
+			*first = FALSE;
+		}
+		else
+		{
+			/* output WKC counts 2 times when using LRW, emulate the same for LWR */
+			*wkc += wkc2 * 2;
+		}
+		*valid_wkc = 1;
+		break;
+	default:
+		//nop
+		break;
+	}
+}
+
+#ifdef EC_VER1
+//int ec::setupdatagram(void *frame, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data)
+//{
+//	return ecx_portt::getInstance()->setupdatagram(frame, com, idx, ADP, ADO, length, data);
+//}
 
 int ec::adddatagram (void *frame, uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data)
 {

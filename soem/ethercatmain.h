@@ -362,14 +362,14 @@ typedef struct PACKED
 PACKED_END
 
 /** stack structure to store segmented LRD/LWR/LRW constructs */
-typedef struct
+struct ec_idxstackT
 {
    uint8   pushed;
    uint8   pulled;
    uint8   idx[EC_MAXBUF];
    void    *data[EC_MAXBUF];
    uint16  length[EC_MAXBUF];
-} ec_idxstackT;
+};
 
 /** ringbuf for error storage */
 typedef struct

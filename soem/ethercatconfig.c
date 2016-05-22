@@ -326,7 +326,7 @@ int ecx_contextt::recover_slave(uint16 slave, int timeout)
    ADPh = (uint16)(1 - slave);
    /* check if we found another slave than the requested */
    readadr = 0xfffe;
-   wkc = ecx::APRD(port, ADPh, ECT_REG_STADR, sizeof(readadr), &readadr, timeout);
+   wkc = port->APRD(ADPh, ECT_REG_STADR, sizeof(readadr), &readadr, timeout);
    /* correct slave found, finished */
    if(readadr == configadr)
    {
@@ -336,11 +336,11 @@ int ecx_contextt::recover_slave(uint16 slave, int timeout)
    if( (wkc > 0) && (readadr == 0))
    {
       /* clear possible slaves at EC_TEMPNODE */
-      ecx::FPWRw(port, EC_TEMPNODE, ECT_REG_STADR, htoes(0) , 0);
+      port->FPWRw(EC_TEMPNODE, ECT_REG_STADR, htoes(0) , 0);
       /* set temporary node address of slave */
-      if(ecx::APWRw(port, ADPh, ECT_REG_STADR, htoes(EC_TEMPNODE) , timeout) <= 0)
+      if(port->APWRw(ADPh, ECT_REG_STADR, htoes(EC_TEMPNODE) , timeout) <= 0)
       {
-         ecx::FPWRw(port, EC_TEMPNODE, ECT_REG_STADR, htoes(0) , 0);
+         port->FPWRw(EC_TEMPNODE, ECT_REG_STADR, htoes(0) , 0);
          return 0; /* slave fails to respond */
       }
 
@@ -348,7 +348,7 @@ int ecx_contextt::recover_slave(uint16 slave, int timeout)
       eeprom2master(slave); /* set Eeprom control to master */
 
       /* check if slave is the same as configured before */
-      if ((ecx::FPRDw(port, EC_TEMPNODE, ECT_REG_ALIAS, timeout) ==
+      if ((port->FPRDw(EC_TEMPNODE, ECT_REG_ALIAS, timeout) ==
              slavelist[slave].aliasadr) &&
           (readeeprom(slave, ECT_SII_ID, EC_TIMEOUTEEP) ==
              slavelist[slave].eep_id) &&
@@ -357,13 +357,13 @@ int ecx_contextt::recover_slave(uint16 slave, int timeout)
           (readeeprom(slave, ECT_SII_REV, EC_TIMEOUTEEP) ==
              slavelist[slave].eep_rev))
       {
-         rval = ecx::FPWRw(port, EC_TEMPNODE, ECT_REG_STADR, htoes(configadr) , timeout);
+         rval = port->FPWRw(EC_TEMPNODE, ECT_REG_STADR, htoes(configadr) , timeout);
          slavelist[slave].configadr = configadr;
       }
       else
       {
          /* slave is not the expected one, remove config address*/
-         ecx::FPWRw(port, EC_TEMPNODE, ECT_REG_STADR, htoes(0) , timeout);
+         port->FPWRw(EC_TEMPNODE, ECT_REG_STADR, htoes(0) , timeout);
          slavelist[slave].configadr = configadr;
       }
    }

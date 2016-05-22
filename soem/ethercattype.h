@@ -104,56 +104,143 @@
 /** default number of retries if wkc <= 0 */
 #define EC_DEFAULTRETRIES  3
 
-/** definition for frame buffers */
-typedef uint8 ec_bufT[EC_BUFSIZE];
-
-/** ethernet header definition */
-PACKED_BEGIN
-typedef struct PACKED
+/** Ethercat command types */
+enum ec_cmdtype
 {
-   /** destination MAC */
-   uint16  da0,da1,da2;
-   /** source MAC */
-   uint16  sa0,sa1,sa2;
-   /** ethernet type */
-   uint16  etype;
-} ec_etherheadert;
-PACKED_END
-
-/** ethernet header size */
-#define ETH_HEADERSIZE      sizeof(ec_etherheadert)
-
+	/** No operation */
+	EC_CMD_NOP = 0x00,
+	/** Auto Increment Read */
+	EC_CMD_APRD,
+	/** Auto Increment Write */
+	EC_CMD_APWR,
+	/** Auto Increment Read Write */
+	EC_CMD_APRW,
+	/** Configured Address Read */
+	EC_CMD_FPRD,
+	/** Configured Address Write */
+	EC_CMD_FPWR,
+	/** Configured Address Read Write */
+	EC_CMD_FPRW,
+	/** Broadcast Read */
+	EC_CMD_BRD,
+	/** Broadcast Write */
+	EC_CMD_BWR,
+	/** Broadcast Read Write */
+	EC_CMD_BRW,
+	/** Logical Memory Read */
+	EC_CMD_LRD,
+	/** Logical Memory Write */
+	EC_CMD_LWR,
+	/** Logical Memory Read Write */
+	EC_CMD_LRW,
+	/** Auto Increment Read Multiple Write */
+	EC_CMD_ARMW,
+	/** Configured Read Multiple Write */
+	EC_CMD_FRMW
+	/** Reserved */
+};
+#include <stddef.h>
 /** EtherCAT datagram header definition */
 PACKED_BEGIN
-typedef struct PACKED
+struct EC_Header PACKED
 {
-   /** length of EtherCAT datagram */
-   uint16  elength;
-   /** EtherCAT command, see ec_cmdtype */
-   uint8   command;
-   /** index, used in SOEM for Tx to Rx recombination */
-   uint8   index;
-   /** ADP */
-   uint16  ADP;
-   /** ADO */
-   uint16  ADO;
-   /** length of data portion in datagram */
-   uint16  dlength;
-   /** interrupt, currently unused */
-   uint16  irpt;
-} ec_comt;
+public:
+	void setIndex(uint8 index)
+	{
+		index_ = index;
+	}
+	uint8 getIndex()const
+	{
+		return index_;
+	}
+	uint16 getElength();
+	static void* set(void *ecatHeader, uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length);
+	static void* add(void *ecatHeader, uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, int prevlength);
+	ec_cmdtype getCommand()const
+	{
+		return static_cast<ec_cmdtype>(command_);
+	}
+private:
+	/** definition of datagram follows bit in ec_comt.dlength */
+	static const int EC_DATAGRAMFOLLOWS = (1 << 15);
+	/** length of EtherCAT datagram */
+	uint16  elength_;
+	/** EtherCAT command, see ec_cmdtype */
+	uint8   command_;
+	/** index, used in SOEM for Tx to Rx recombination */
+	uint8   index_;
+	/** ADP */
+	uint16  ADP_;
+	/** ADO */
+	uint16  ADO_;
+	/** length of data portion in datagram */
+	uint16  dlength_;
+	/** interrupt, currently unused */
+	uint16  irpt_;
+};
+PACKED_END
+/** ethernet header definition */
+PACKED_BEGIN
+struct EtherNetHeader PACKED
+{
+	boolean isEtherCATFrame()const;
+	/** destination MAC */
+	uint16  da0, da1, da2;
+	/** source MAC */
+	uint16  sa0, sa1, sa2;
+	/** ethernet type */
+	uint16  etype;
+};
 PACKED_END
 
-/** EtherCAT header size */
-#define EC_HEADERSIZE       sizeof(ec_comt)
-/** size of ec_comt.elength item in EtherCAT header */
-#define EC_ELENGTHSIZE      sizeof(uint16)
-/** offset position of command in EtherCAT header */
-#define EC_CMDOFFSET        EC_ELENGTHSIZE
-/** size of workcounter item in EtherCAT datagram */
-#define EC_WKCSIZE          sizeof(uint16)
-/** definition of datagram follows bit in ec_comt.dlength */
-#define EC_DATAGRAMFOLLOWS  (1 << 15)
+/** definition for frame buffers */
+struct ec_bufT
+{
+public:
+	//! @return Workcounter
+	int retreive()
+	{
+		//! EC_Headerとしてみている気がする。以下の処理はelength_の取得か？
+		uint16 l = buf_[0] + ((uint16)(buf_[1] & 0x0f) << 8);
+		/* return WKC */
+		return getWorkCounterFromTempBuf(l);
+	}
+	void receive_processdata(uint16 DCtO, uint16 DCl, uint16 stacklen, int wkc2, void* stackdata, int64* DCtime, int* wkc, int *valid_wkc, boolean* first);
+
+	static void* writedatagramdata(void *datagramdata, ec_cmdtype com, uint16 length, const void * data);
+	ec_cmdtype getCommand()const;
+	void copyHeader(void *dst, size_t datalength)const;
+	int getWorkCounterFromTempBuf(size_t elength)const;
+	int getWorkCounter(size_t datalength)const;
+	EtherNetHeader* getEtherNetHeader()
+	{
+		return reinterpret_cast<EtherNetHeader*>(&buf_[0]);
+	}
+	void* head()
+	{
+		return &buf_[0];
+	}
+	EC_Header* getECATHeader()
+	{
+		return reinterpret_cast<EC_Header*>(&buf_[sizeof(EtherNetHeader)]);
+	}
+	int64 getDCTime(size_t DCtO)const;
+	int setupdatagram(uint8 com, uint8 idx, uint16 ADP, uint16 ADO, uint16 length, void *data, int* txbuflength);
+	int adddatagram(uint8 com, uint8 idx, boolean more, uint16 ADP, uint16 ADO, uint16 length, void *data, int* txbuflength);
+private:
+	uint8 buf_[EC_BUFSIZE];
+};
+struct WorkCounter
+{
+public:
+	static void* clear(void* wkc)
+	{
+		static_cast<WorkCounter*>(wkc)->val_ = 0x0000U;
+		return static_cast<uint8*>(wkc)+sizeof(WorkCounter);
+	}
+	uint16 val_;
+};
+
 
 /** Possible error codes returned. */
 typedef enum
@@ -191,7 +278,7 @@ typedef enum
 } ec_state;
 
 /** Possible buffer states */
-typedef enum
+enum ec_bufstate
 {
    /** Empty */
    EC_BUF_EMPTY        = 0x00,
@@ -203,7 +290,7 @@ typedef enum
    EC_BUF_RCVD         = 0x03,
    /** Cycle completed */
    EC_BUF_COMPLETE     = 0x04
-} ec_bufstate;
+};
 
 /** Ethercat data types */
 typedef enum
@@ -237,41 +324,6 @@ typedef enum
    ECT_BIT8            = 0x0037
 } ec_datatype;
 
-/** Ethercat command types */
-typedef enum
-{
-   /** No operation */
-   EC_CMD_NOP          = 0x00,
-   /** Auto Increment Read */
-   EC_CMD_APRD,
-   /** Auto Increment Write */
-   EC_CMD_APWR,
-   /** Auto Increment Read Write */
-   EC_CMD_APRW,
-   /** Configured Address Read */
-   EC_CMD_FPRD,
-   /** Configured Address Write */
-   EC_CMD_FPWR,
-   /** Configured Address Read Write */
-   EC_CMD_FPRW,
-   /** Broadcast Read */
-   EC_CMD_BRD,
-   /** Broadcast Write */
-   EC_CMD_BWR,
-   /** Broadcast Read Write */
-   EC_CMD_BRW,
-   /** Logical Memory Read */
-   EC_CMD_LRD,
-   /** Logical Memory Write */
-   EC_CMD_LWR,
-   /** Logical Memory Read Write */
-   EC_CMD_LRW,
-   /** Auto Increment Read Multiple Write */
-   EC_CMD_ARMW,
-   /** Configured Read Multiple Write */
-   EC_CMD_FRMW
-   /** Reserved */
-} ec_cmdtype;
 
 /** Ethercat EEprom command types */
 typedef enum
