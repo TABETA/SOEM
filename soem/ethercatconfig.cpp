@@ -170,18 +170,14 @@ void EtherCATConfig::init()
 }
 int EtherCATConfig::ec_findconfig(uint32 man, uint32 id)
 {
-   int i = 0;
-
-   do
-   {
-      i++;
-   } while ( (ec_configlist[i].man != EC_CONFIGEND) &&
-           ((ec_configlist[i].man != man) || (ec_configlist[i].id != id)) );
-   if (ec_configlist[i].man == EC_CONFIGEND)
-   {
-      i = 0;
-   }
-   return i;
+	for (int i = 1; (ec_configlist[i].man != EC_CONFIGEND); ++i)
+	{
+		if ((ec_configlist[i].man == man) || (ec_configlist[i].id == id)) 
+		{
+			return i;
+		}
+	}
+	return 0;
 }
 int EtherCATConfig::find(ec_slavet *csl, uint32 man, uint32 id)
 {

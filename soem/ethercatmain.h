@@ -433,6 +433,10 @@ private:
 	uint8 prevport(uint16 slave, uint8 port);
 	uint8 parentport(uint16 parent);
 public:
+	ec_slavet& ec_slave(int index)
+	{
+		return slavelist[index];
+	}
 	static ecx_contextt* getInstance();
 	void pusherror(const ec_errort *Ec);
 	boolean ecx_contextt::poperror(ec_errort *Ec);
@@ -505,15 +509,27 @@ public:
 	int SoEread(uint16 slave, uint8 driveNo, uint8 elementflags, uint16 idn, int *psize, void *p, int timeout);
 	int SoEwrite(uint16 slave, uint8 driveNo, uint8 elementflags, uint16 idn, int psize, void *p, int timeout);
 	char* elist2string();
+	int getSlaveCount()const
+	{
+		return slavecount;
+	}
+	void setSlaveCount(int v)
+	{
+		slavecount = v;
+	}
 
 private:
 	ecx_contextt();
    /** port reference, may include red_port */
    ecx_portt      *port;
-   /** slavelist reference */
-   ec_slavet      *slavelist;
+   /** Main slave data array.
+   *  Each slave found on the network gets its own record.
+   *  ec_slave[0] is reserved for the master. Structure gets filled
+   *  in by the configuration function ec_config().
+   */
+   ec_slavet      slavelist[EC_MAXSLAVE];
    /** number of slaves found in configuration */
-   int            *slavecount;
+   int            slavecount;
    /** maximum number of slaves allowed in slavelist */
    int            maxslave;
    /** grouplist reference */
@@ -553,10 +569,6 @@ private:
 };
 
 #ifdef EC_VER1
-/** main slave data structure array */
-extern ec_slavet   ec_slave[EC_MAXSLAVE];
-/** number of slaves found by configuration function */
-extern int         ec_slavecount;
 /** slave group structure */
 extern ec_groupt   ec_group[EC_MAXGROUP];
 extern boolean     EcatError;

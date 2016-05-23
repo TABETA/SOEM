@@ -98,14 +98,8 @@ typedef struct PACKED
 PACKED_END
 
 #ifdef EC_VER1
-/** Main slave data array.
- *  Each slave found on the network gets its own record.
- *  ec_slave[0] is reserved for the master. Structure gets filled
- *  in by the configuration function ec_config().
- */
-ec_slavet               ec_slave[EC_MAXSLAVE];
-/** number of slaves found on the network */
-int                     ec_slavecount;
+
+
 /** slave group structure */
 ec_groupt               ec_group[EC_MAXGROUP];
 
@@ -141,8 +135,8 @@ ecx_contextt* ecx_contextt::getInstance()
 }
 ecx_contextt::ecx_contextt():
 	port(ecx_portt::getInstance()),
-	slavelist(&ec_slave[0]),
-	slavecount(&ec_slavecount),
+	slavelist(),
+	slavecount(),
 	maxslave(EC_MAXSLAVE),
 	grouplist(&ec_group[0]),
 	maxgroup(EC_MAXGROUP),
@@ -725,7 +719,7 @@ int ecx_contextt::readstate()
    uint16 fslave = 1;
    do
    {
-      lslave = *(slavecount);
+      lslave = slavecount;
       if ((lslave - fslave) >= MAX_FPRD_MULTI)
       {
          lslave = fslave + MAX_FPRD_MULTI - 1;
@@ -749,7 +743,7 @@ int ecx_contextt::readstate()
 		  slavelist[0].ALstatuscode |= slavelist[slave].ALstatuscode;
       }
       fslave = lslave + 1;
-   } while(lslave < *(slavecount));
+   } while(lslave < slavecount);
    slavelist[0].state = lowest;
 
    return lowest;
@@ -792,16 +786,14 @@ int ecx_contextt::writestate( uint16 slave)
  */
 uint16 ecx_contextt::statecheck( uint16 slave, uint16 reqstate, int timeout)
 {
-   uint16 configadr, state, rval;
-   ec_alstatust slstat;
-   osal_timert timer;
-
-   if ( slave > *(slavecount) )
+   if ( slave > slavecount )
    {
       return 0;
    }
+   osal_timert timer;
    osal_timer_start(&timer, timeout);
-   configadr = slavelist[slave].configadr;
+   uint16 configadr = slavelist[slave].configadr;
+   uint16 state, rval;
    do
    {
       if (slave < 1)
@@ -812,6 +804,7 @@ uint16 ecx_contextt::statecheck( uint16 slave, uint16 reqstate, int timeout)
       }
       else
       {
+		 ec_alstatust slstat;
          slstat.alstatus = 0;
          slstat.alstatuscode = 0;
          port->FPRD(configadr, ECT_REG_ALSTAT, sizeof(slstat), &slstat, EC_TIMEOUTRET);
@@ -2094,20 +2087,18 @@ int ecx_contextt::SDOwrite(uint16 Slave, uint16 Index, uint8 SubIndex,
 	boolean CA, int psize, void *p, int Timeout)
 {
 	ec_SDOt *SDOp, *aSDOp;
-	int wkc, maxdata;
 	ec_mbxbuft MbxIn, MbxOut;
 	uint8 cnt, toggle;
 	uint16 framedatasize;
 	boolean  NotLast;
-	uint8 *hp;
 
 	ec_clearmbx(&MbxIn);
 	/* Empty slave out mailbox if something is in. Timout set to 0 */
-	wkc = mbxreceive(Slave, (ec_mbxbuft *)&MbxIn, 0);
+	int wkc = mbxreceive(Slave, (ec_mbxbuft *)&MbxIn, 0);
 	ec_clearmbx(&MbxOut);
 	aSDOp = (ec_SDOt *)&MbxIn;
 	SDOp = (ec_SDOt *)&MbxOut;
-	maxdata = slavelist[Slave].mbx_l - 0x10; /* data section=mailbox size - 6 mbx - 2 CoE - 8 sdo req */
+	int maxdata = slavelist[Slave].mbx_l - 0x10; /* data section=mailbox size - 6 mbx - 2 CoE - 8 sdo req */
 	/* if small data use expedited transfer */
 	if ((psize <= 4) && !CA)
 	{
@@ -2122,7 +2113,7 @@ int ecx_contextt::SDOwrite(uint16 Slave, uint16 Index, uint8 SubIndex,
 		SDOp->Command = ECT_SDO_DOWN_EXP | (((4 - psize) << 2) & 0x0c); /* expedited SDO download transfer */
 		SDOp->Index = htoes(Index);
 		SDOp->SubIndex = SubIndex;
-		hp = static_cast<uint8_t*>(p);
+		uint8 *hp = static_cast<uint8_t*>(p);
 		/* copy parameter data to mailbox */
 		memcpy(&SDOp->ldata[0], hp, psize);
 		/* send mailbox SDO download request to slave */
@@ -2190,7 +2181,7 @@ int ecx_contextt::SDOwrite(uint16 Slave, uint16 Index, uint8 SubIndex,
 			SDOp->SubIndex = 1;
 		}
 		SDOp->ldata[0] = htoel(psize);
-		hp = static_cast<uint8_t*>(p);
+		uint8 *hp = static_cast<uint8_t*>(p);
 		/* copy parameter data to mailbox */
 		memcpy(&SDOp->ldata[1], hp, framedatasize);
 		hp += framedatasize;
@@ -3084,14 +3075,13 @@ int ecx_contextt::readOE(uint16 Item, ec_ODlistt *pODlist, ec_OElistt *pOElist)
 
 void ecx_contextt::init_context()
 {
-	int lp;
-	*(slavecount) = 0;
+	slavecount = 0;
 	/* clean ec_slave array */
 	memset(slavelist, 0x00, sizeof(ec_slavet)* maxslave);
 	memset(grouplist, 0x00, sizeof(ec_groupt)* maxgroup);
 	/* clear slave eeprom cache, does not actually read any eeprom */
 	siigetbyte(0, EC_MAXEEPBUF);
-	for (lp = 0; lp < maxgroup; lp++)
+	for (int lp = 0; lp < maxgroup; lp++)
 	{
 		grouplist[lp].logstartaddr = lp << 16; /* default start address per group entry */
 	}
@@ -3117,7 +3107,7 @@ int ecx_contextt::ecx_detect_slaves()
 		/* this is strictly "less than" since the master is "slave 0" */
 		if (wkc < EC_MAXSLAVE)
 		{
-			*(slavecount) = wkc;
+			slavecount = wkc;
 		}
 		else
 		{
@@ -3176,7 +3166,7 @@ int ecx_contextt::config_from_table(uint16 slave)
 int ecx_contextt::lookup_prev_sii(uint16 slave)
 {
 	int i, nSM;
-	if ((slave > 1) && (*(slavecount) > 0))
+	if ((slave > 1) && (slavecount > 0))
 	{
 		i = 1;
 		while (((slavelist[i].eep_man != slavelist[slave].eep_man) ||
@@ -3225,41 +3215,30 @@ int ecx_contextt::lookup_prev_sii(uint16 slave)
 */
 int ecx_contextt::config_init(uint8 usetable)
 {
-	uint16 slave, ADPh, configadr, ssigen;
-	uint16 topology, estat;
-	int16 topoc, slavec, aliasadr;
-	uint8 b, h;
-	uint8 SMc;
-	uint32 eedat;
-	int wkc, cindex, nSM;
-
 	EC_PRINT("ec_config_init %d\n", usetable);
 	init_context();
-	wkc = ecx_detect_slaves();
+	int wkc = ecx_detect_slaves();
 	if (wkc > 0)
 	{
 		ecx_set_slaves_to_default();
-		for (slave = 1; slave <= *(slavecount); slave++)
+		for (uint16 slave = 1; slave <= slavecount; slave++)
 		{
-			ADPh = (uint16)(1 - slave);
+			uint16 ADPh = (uint16)(1 - slave);
 			slavelist[slave].Itype =
 				etohs(port->APRDw(ADPh, ECT_REG_PDICTL, EC_TIMEOUTRET3)); /* read interface type of slave */
 			/* a node offset is used to improve readibility of network frames */
 			/* this has no impact on the number of addressable slaves (auto wrap around) */
 			port->APWRw(ADPh, ECT_REG_STADR, htoes(slave + EC_NODEOFFSET), EC_TIMEOUTRET3); /* set node address of slave */
-			if (slave == 1)
-			{
-				b = 1; /* kill non ecat frames for first slave */
-			}
-			else
-			{
-				b = 0; /* pass all frames for following slaves */
-			}
+			uint8 b = (slave == 1)?
+						1: /* kill non ecat frames for first slave */
+						0; /* pass all frames for following slaves */
 			port->APWRw(ADPh, ECT_REG_DLCTL, htoes(b), EC_TIMEOUTRET3); /* set non ecat frame behaviour */
-			configadr = etohs(port->APRDw(ADPh, ECT_REG_STADR, EC_TIMEOUTRET3));
+			uint16 configadr = etohs(port->APRDw(ADPh, ECT_REG_STADR, EC_TIMEOUTRET3));
 			slavelist[slave].configadr = configadr;
+			int16 aliasadr;
 			port->FPRD(configadr, ECT_REG_ALIAS, sizeof(aliasadr), &aliasadr, EC_TIMEOUTRET3);
 			slavelist[slave].aliasadr = etohs(aliasadr);
+			uint16 estat;
 			port->FPRD(configadr, ECT_REG_EEPSTAT, sizeof(estat), &estat, EC_TIMEOUTRET3);
 			estat = etohs(estat);
 			if (estat & EC_ESTAT_R64) /* check if slave can read 8 byte chunks */
@@ -3268,27 +3247,27 @@ int ecx_contextt::config_init(uint8 usetable)
 			}
 			readeeprom1(slave, ECT_SII_MANUF); /* Manuf */
 		}
-		for (slave = 1; slave <= *(slavecount); slave++)
+		for (uint16 slave = 1; slave <= slavecount; slave++)
 		{
 			slavelist[slave].eep_man =
 				etohl(readeeprom2(slave, EC_TIMEOUTEEP)); /* Manuf */
 			readeeprom1(slave, ECT_SII_ID); /* ID */
 		}
-		for (slave = 1; slave <= *(slavecount); slave++)
+		for (uint16 slave = 1; slave <= slavecount; slave++)
 		{
 			slavelist[slave].eep_id =
 				etohl(readeeprom2(slave, EC_TIMEOUTEEP)); /* ID */
 			readeeprom1(slave, ECT_SII_REV); /* revision */
 		}
-		for (slave = 1; slave <= *(slavecount); slave++)
+		for (uint16 slave = 1; slave <= slavecount; slave++)
 		{
 			slavelist[slave].eep_rev =
 				etohl(readeeprom2(slave, EC_TIMEOUTEEP)); /* revision */
 			readeeprom1(slave, ECT_SII_RXMBXADR); /* write mailbox address + mailboxsize */
 		}
-		for (slave = 1; slave <= *(slavecount); slave++)
+		for (uint16 slave = 1; slave <= slavecount; slave++)
 		{
-			eedat = etohl(readeeprom2(slave, EC_TIMEOUTEEP)); /* write mailbox address and mailboxsize */
+			uint32 eedat = etohl(readeeprom2(slave, EC_TIMEOUTEEP)); /* write mailbox address and mailboxsize */
 			slavelist[slave].mbx_wo = (uint16)LO_WORD(eedat);
 			slavelist[slave].mbx_l = (uint16)HI_WORD(eedat);
 			if (slavelist[slave].mbx_l > 0)
@@ -3296,11 +3275,11 @@ int ecx_contextt::config_init(uint8 usetable)
 				readeeprom1(slave, ECT_SII_TXMBXADR); /* read mailbox offset */
 			}
 		}
-		for (slave = 1; slave <= *(slavecount); slave++)
+		for (uint16 slave = 1; slave <= slavecount; slave++)
 		{
 			if (slavelist[slave].mbx_l > 0)
 			{
-				eedat = etohl(readeeprom2(slave, EC_TIMEOUTEEP)); /* read mailbox offset */
+				uint32 eedat = etohl(readeeprom2(slave, EC_TIMEOUTEEP)); /* read mailbox offset */
 				slavelist[slave].mbx_ro = (uint16)LO_WORD(eedat); /* read mailbox offset */
 				slavelist[slave].mbx_rl = (uint16)HI_WORD(eedat); /*read mailbox length */
 				if (slavelist[slave].mbx_rl == 0)
@@ -3309,7 +3288,7 @@ int ecx_contextt::config_init(uint8 usetable)
 				}
 				readeeprom1(slave, ECT_SII_MBXPROTO);
 			}
-			configadr = slavelist[slave].configadr;
+			uint16 configadr = slavelist[slave].configadr;
 			if ((etohs(port->FPRDw(configadr, ECT_REG_ESCSUP, EC_TIMEOUTRET3)) & 0x04) > 0)  /* Support DC? */
 			{
 				slavelist[slave].hasdc = TRUE;
@@ -3318,9 +3297,9 @@ int ecx_contextt::config_init(uint8 usetable)
 			{
 				slavelist[slave].hasdc = FALSE;
 			}
-			topology = etohs(port->FPRDw(configadr, ECT_REG_DLSTAT, EC_TIMEOUTRET3)); /* extract topology from DL status */
-			h = 0;
-			b = 0;
+			uint16 topology = etohs(port->FPRDw(configadr, ECT_REG_DLSTAT, EC_TIMEOUTRET3)); /* extract topology from DL status */
+			uint8 h = 0;
+			uint8 b = 0;
 			if ((topology & 0x0300) == 0x0200) /* port0 open and communication established */
 			{
 				h++;
@@ -3355,8 +3334,8 @@ int ecx_contextt::config_init(uint8 usetable)
 			slavelist[slave].parent = 0; /* parent is master */
 			if (slave > 1)
 			{
-				topoc = 0;
-				slavec = slave - 1;
+				int16 topoc = 0;
+				int16 slavec = slave - 1;
 				do
 				{
 					topology = slavelist[slavec].topology;
@@ -3398,7 +3377,7 @@ int ecx_contextt::config_init(uint8 usetable)
 				slavelist[slave].SM[1].SMflags = EtherCATConfig::getDefaultMBXSM1();
 				slavelist[slave].mbx_proto = readeeprom2(slave, EC_TIMEOUTEEP);
 			}
-			cindex = 0;
+			int cindex = 0;
 			/* use configuration table ? */
 			if (usetable == 1)
 			{
@@ -3407,7 +3386,7 @@ int ecx_contextt::config_init(uint8 usetable)
 			/* slave not in configuration table, find out via SII */
 			if (!cindex && !lookup_prev_sii(slave))
 			{
-				ssigen = siifind(slave, ECT_SII_GENERAL);
+				uint16 ssigen = siifind(slave, ECT_SII_GENERAL);
 				/* SII general section */
 				if (ssigen)
 				{
@@ -3437,14 +3416,14 @@ int ecx_contextt::config_init(uint8 usetable)
 						(unsigned int)slavelist[slave].eep_id);
 				}
 				/* SII SM section */
-				nSM = siiSM(slave, eepSM);
+				int nSM = siiSM(slave, eepSM);
 				if (nSM>0)
 				{
 					slavelist[slave].SM[0].StartAddr = htoes(eepSM->PhStart);
 					slavelist[slave].SM[0].SMlength = htoes(eepSM->Plength);
 					slavelist[slave].SM[0].SMflags =
 						htoel((eepSM->Creg) + (eepSM->Activate << 16));
-					SMc = 1;
+					uint8 SMc = 1;
 					while ((SMc < EC_MAXSM) && siiSMnext(slave, eepSM, SMc))
 					{
 						slavelist[slave].SM[SMc].StartAddr = htoes(eepSM->PhStart);
@@ -3514,7 +3493,7 @@ int ecx_contextt::config_init(uint8 usetable)
 int ecx_contextt::lookup_mapping(uint16 slave, int *Osize, int *Isize)
 {
 	int i, nSM;
-	if ((slave > 1) && (*(slavecount) > 0))
+	if ((slave > 1) && (slavecount > 0))
 	{
 		i = 1;
 		while (((slavelist[i].eep_man != slavelist[slave].eep_man) ||
@@ -3717,7 +3696,7 @@ int ecx_contextt::config_map_group(void *pIOmap, uint8 group)
 	uint32 segmentsize = 0;
 	int thrc;
 
-	if ((*(slavecount) > 0) && (group < maxgroup))
+	if ((slavecount > 0) && (group < maxgroup))
 	{
 		EC_PRINT("ec_config_map_group IOmap:%p group:%d\n", pIOmap, group);
 		LogAddr = grouplist[group].logstartaddr;
@@ -3727,11 +3706,11 @@ int ecx_contextt::config_map_group(void *pIOmap, uint8 group)
 		grouplist[group].outputsWKC = 0;
 		grouplist[group].inputsWKC = 0;
 		EtherCATConfig::init_runnning();
-		for (uint16 slave = 1; slave <= *(slavecount); slave++)
+		for (uint16 slave = 1; slave <= slavecount; slave++)
 		{
 			if (!group || (group == slavelist[slave].group))
 			{
-				EtherCATConfig::findCoEandSoEmappingOfSlavesInMultipleThreads(this, *slavecount);
+				EtherCATConfig::findCoEandSoEmappingOfSlavesInMultipleThreads(this, slavecount);
 			}
 		}
 		/* wait for all threads to finish */
@@ -3744,7 +3723,7 @@ int ecx_contextt::config_map_group(void *pIOmap, uint8 group)
 			}
 		} while (thrc);
 		/* find SII mapping of slave and program SM */
-		for (uint16 slave = 1; slave <= *(slavecount); slave++)
+		for (uint16 slave = 1; slave <= slavecount; slave++)
 		{
 			if (!group || (group == slavelist[slave].group))
 			{
@@ -3754,7 +3733,7 @@ int ecx_contextt::config_map_group(void *pIOmap, uint8 group)
 		}
 
 		/* do input mapping of slave and program FMMUs */
-		for (uint16 slave = 1; slave <= *(slavecount); slave++)
+		for (uint16 slave = 1; slave <= slavecount; slave++)
 		{
 			configadr = slavelist[slave].configadr;
 
@@ -3912,7 +3891,7 @@ int ecx_contextt::config_map_group(void *pIOmap, uint8 group)
 		}
 
 		/* do input mapping of slave and program FMMUs */
-		for (uint16 slave = 1; slave <= *(slavecount); slave++)
+		for (uint16 slave = 1; slave <= slavecount; slave++)
 		{
 			configadr = slavelist[slave].configadr;
 			if (!group || (group == slavelist[slave].group))
@@ -4401,7 +4380,7 @@ boolean ecx_contextt::configdc()
 	mastertime = osal_current_time();
 	mastertime.sec -= 946684800UL;  /* EtherCAT uses 2000-01-01 as epoch start instead of 1970-01-01 */
 	mastertime64 = (((uint64)mastertime.sec * 1000000) + (uint64)mastertime.usec) * 1000;
-	for (i = 1; i <= *(slavecount); i++)
+	for (i = 1; i <= slavecount; i++)
 	{
 		slavelist[i].consumedports = slavelist[i].activeports;
 		if (slavelist[i].hasdc)

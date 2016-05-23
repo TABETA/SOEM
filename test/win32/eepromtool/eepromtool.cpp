@@ -175,7 +175,7 @@ int eeprom_read(int slave, int start, int length)
    uint64 b8;
    uint8 eepctl;
 
-   if((ec_slavecount >= slave) && (slave > 0) && ((start + length) <= MAXBUF))
+   if ((ecx_contextt::getInstance()->getSlaveCount() >= slave) && (slave > 0) && ((start + length) <= MAXBUF))
    {
       aiadr = 1 - slave;
       eepctl = 2;
@@ -228,7 +228,7 @@ int eeprom_write(int slave, int start, int length)
    uint8 eepctl;
    int ret;
 
-   if((ec_slavecount >= slave) && (slave > 0) && ((start + length) <= MAXBUF))
+   if ((ecx_contextt::getInstance()->getSlaveCount() >= slave) && (slave > 0) && ((start + length) <= MAXBUF))
    {
       aiadr = 1 - slave;
       eepctl = 2;
@@ -269,10 +269,10 @@ void eepromtool(char *ifname, int slave, int mode, char *fname)
 	  wkc = ec::BRD(0x0000, ECT_REG_TYPE, sizeof(w), &w, EC_TIMEOUTSAFE);      /* detect number of slaves */
        if (wkc > 0)
        {
-         ec_slavecount = wkc;
+		   ecx_contextt::getInstance()->setSlaveCount(wkc);
 
-         printf("%d slaves found.\n",ec_slavecount);
-         if((ec_slavecount >= slave) && (slave > 0))
+		   printf("%d slaves found.\n", ecx_contextt::getInstance()->getSlaveCount());
+		   if ((ecx_contextt::getInstance()->getSlaveCount() >= slave) && (slave > 0))
          {
             if ((mode == MODE_READBIN) || (mode == MODE_READINTEL))
             {

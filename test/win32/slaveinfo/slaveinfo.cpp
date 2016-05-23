@@ -284,7 +284,7 @@ int si_map_sdo(int slave)
     uint8 nSM, iSM, tSM;
     int Tsize, outputs_bo, inputs_bo;
     uint8 SMt_bug_add;
-
+	ecx_contextt* context = ecx_contextt::getInstance();
     printf("PDO mapping according to CoE :\n");
     SMt_bug_add = 0;
     outputs_bo = 0;
@@ -320,14 +320,14 @@ int si_map_sdo(int slave)
                 {
                     /* read the assign RXPDO */
                     printf("  SM%1d outputs\n     addr b   index: sub bitl data_type    name\n", iSM);
-                    Tsize = si_PDOassign(slave, ECT_SDO_PDOASSIGN + iSM, (int)(ec_slave[slave].outputs - (uint8 *)&IOmap[0]), outputs_bo );
+                    Tsize = si_PDOassign(slave, ECT_SDO_PDOASSIGN + iSM, (int)(context->ec_slave(slave).outputs - (uint8 *)&IOmap[0]), outputs_bo );
                     outputs_bo += Tsize;
                 }
                 if (tSM == 4) // inputs
                 {
                     /* read the assign TXPDO */
                     printf("  SM%1d inputs\n     addr b   index: sub bitl data_type    name\n", iSM);
-                    Tsize = si_PDOassign(slave, ECT_SDO_PDOASSIGN + iSM, (int)(ec_slave[slave].inputs - (uint8 *)&IOmap[0]), inputs_bo );
+                    Tsize = si_PDOassign(slave, ECT_SDO_PDOASSIGN + iSM, (int)(context->ec_slave(slave).inputs - (uint8 *)&IOmap[0]), inputs_bo );
                     inputs_bo += Tsize;
                 }
             }
@@ -355,7 +355,7 @@ int si_siiPDO(uint16 slave, uint8 t, int mapoffset, int bitoffset)
     int abs_offset, abs_bit;
     char str_name[EC_MAXNAME + 1];
 
-    eectl = ec_slave[slave].eep_pdi;
+    eectl = ecx_contextt::getInstance()->ec_slave(slave).eep_pdi;
     Size = 0;
     totalsize = 0;
     PDO = &eepPDO;
@@ -452,10 +452,10 @@ int si_map_sii(int slave)
     outputs_bo = 0;
     inputs_bo = 0;
     /* read the assign RXPDOs */
-    Tsize = si_siiPDO(slave, 1, (int)(ec_slave[slave].outputs - (uint8*)&IOmap), outputs_bo );
+    Tsize = si_siiPDO(slave, 1, (int)(ecx_contextt::getInstance()->ec_slave(slave).outputs - (uint8*)&IOmap), outputs_bo );
     outputs_bo += Tsize;
     /* read the assign TXPDOs */
-    Tsize = si_siiPDO(slave, 0, (int)(ec_slave[slave].inputs - (uint8*)&IOmap), inputs_bo );
+    Tsize = si_siiPDO(slave, 0, (int)(ecx_contextt::getInstance()->ec_slave(slave).inputs - (uint8*)&IOmap), inputs_bo );
     inputs_bo += Tsize;
     /* found some I/O bits ? */
     if ((outputs_bo > 0) || (inputs_bo > 0))
@@ -506,7 +506,7 @@ void slaveinfo(char *ifname)
    int cnt, i, j, nSM;
     uint16 ssigen;
     int expectedWKC;
-
+	ecx_contextt* context = ecx_contextt::getInstance();
    printf("Starting slaveinfo\n");
 
    /* initialise SOEM, bind socket to ifname */
@@ -518,81 +518,81 @@ void slaveinfo(char *ifname)
       {
          ec_configdc();
          while(EcatError) printf("%s", ec_elist2string());
-         printf("%d slaves found and configured.\n",ec_slavecount);
+		 printf("%d slaves found and configured.\n", context->getSlaveCount());
          expectedWKC = (ec_group[0].outputsWKC * 2) + ec_group[0].inputsWKC;
          printf("Calculated workcounter %d\n", expectedWKC);
          /* wait for all slaves to reach SAFE_OP state */
          ec_statecheck(0, EC_STATE_SAFE_OP,  EC_TIMEOUTSTATE * 3);
-         if (ec_slave[0].state != EC_STATE_SAFE_OP )
+         if (context->ec_slave(0).state != EC_STATE_SAFE_OP )
          {
             printf("Not all slaves reached safe operational state.\n");
             ec_readstate();
-            for(i = 1; i<=ec_slavecount ; i++)
+			for (i = 1; i <= context->getSlaveCount(); i++)
             {
-               if(ec_slave[i].state != EC_STATE_SAFE_OP)
+               if(context->ec_slave(i).state != EC_STATE_SAFE_OP)
                {
                   printf("Slave %d State=%2x StatusCode=%4x : %s\n",
-                     i, ec_slave[i].state, ec_slave[i].ALstatuscode, ec_ALstatuscode2string(ec_slave[i].ALstatuscode));
+                     i, context->ec_slave(i).state, context->ec_slave(i).ALstatuscode, ec_ALstatuscode2string(context->ec_slave(i).ALstatuscode));
                }
             }
          }
 
 
          ec_readstate();
-         for( cnt = 1 ; cnt <= ec_slavecount ; cnt++)
+		 for (cnt = 1; cnt <= context->getSlaveCount(); cnt++)
          {
             printf("\nSlave:%d\n Name:%s\n Output size: %dbits\n Input size: %dbits\n State: %d\n Delay: %d[ns]\n Has DC: %d\n",
-                  cnt, ec_slave[cnt].name, ec_slave[cnt].Obits, ec_slave[cnt].Ibits,
-                  ec_slave[cnt].state, ec_slave[cnt].pdelay, ec_slave[cnt].hasdc);
-            if (ec_slave[cnt].hasdc) printf(" DCParentport:%d\n", ec_slave[cnt].parentport);
-            printf(" Activeports:%d.%d.%d.%d\n", (ec_slave[cnt].activeports & 0x01) > 0 ,
-                                         (ec_slave[cnt].activeports & 0x02) > 0 ,
-                                         (ec_slave[cnt].activeports & 0x04) > 0 ,
-                                         (ec_slave[cnt].activeports & 0x08) > 0 );
-            printf(" Configured address: %4.4x\n", ec_slave[cnt].configadr);
-            printf(" Man: %8.8x ID: %8.8x Rev: %8.8x\n", (int)ec_slave[cnt].eep_man, (int)ec_slave[cnt].eep_id, (int)ec_slave[cnt].eep_rev);
+                  cnt, context->ec_slave(cnt).name, context->ec_slave(cnt).Obits, context->ec_slave(cnt).Ibits,
+                  context->ec_slave(cnt).state, context->ec_slave(cnt).pdelay, context->ec_slave(cnt).hasdc);
+            if (context->ec_slave(cnt).hasdc) printf(" DCParentport:%d\n", context->ec_slave(cnt).parentport);
+            printf(" Activeports:%d.%d.%d.%d\n", (context->ec_slave(cnt).activeports & 0x01) > 0 ,
+                                         (context->ec_slave(cnt).activeports & 0x02) > 0 ,
+                                         (context->ec_slave(cnt).activeports & 0x04) > 0 ,
+                                         (context->ec_slave(cnt).activeports & 0x08) > 0 );
+            printf(" Configured address: %4.4x\n", context->ec_slave(cnt).configadr);
+            printf(" Man: %8.8x ID: %8.8x Rev: %8.8x\n", (int)context->ec_slave(cnt).eep_man, (int)context->ec_slave(cnt).eep_id, (int)context->ec_slave(cnt).eep_rev);
             for(nSM = 0 ; nSM < EC_MAXSM ; nSM++)
             {
-               if(ec_slave[cnt].SM[nSM].StartAddr > 0)
-                  printf(" SM%1d A:%4.4x L:%4d F:%8.8x Type:%d\n",nSM, ec_slave[cnt].SM[nSM].StartAddr, ec_slave[cnt].SM[nSM].SMlength,
-                         (int)ec_slave[cnt].SM[nSM].SMflags, ec_slave[cnt].SMtype[nSM]);
+               if(context->ec_slave(cnt).SM[nSM].StartAddr > 0)
+                  printf(" SM%1d A:%4.4x L:%4d F:%8.8x Type:%d\n",nSM, context->ec_slave(cnt).SM[nSM].StartAddr, context->ec_slave(cnt).SM[nSM].SMlength,
+                         (int)context->ec_slave(cnt).SM[nSM].SMflags, context->ec_slave(cnt).SMtype[nSM]);
             }
-            for(j = 0 ; j < ec_slave[cnt].FMMUunused ; j++)
+            for(j = 0 ; j < context->ec_slave(cnt).FMMUunused ; j++)
             {
                printf(" FMMU%1d Ls:%8.8x Ll:%4d Lsb:%d Leb:%d Ps:%4.4x Psb:%d Ty:%2.2x Act:%2.2x\n", j,
-                       (int)ec_slave[cnt].FMMU[j].LogStart, ec_slave[cnt].FMMU[j].LogLength, ec_slave[cnt].FMMU[j].LogStartbit,
-                       ec_slave[cnt].FMMU[j].LogEndbit, ec_slave[cnt].FMMU[j].PhysStart, ec_slave[cnt].FMMU[j].PhysStartBit,
-                       ec_slave[cnt].FMMU[j].FMMUtype, ec_slave[cnt].FMMU[j].FMMUactive);
+                       (int)context->ec_slave(cnt).FMMU[j].LogStart, context->ec_slave(cnt).FMMU[j].LogLength, context->ec_slave(cnt).FMMU[j].LogStartbit,
+                       context->ec_slave(cnt).FMMU[j].LogEndbit, context->ec_slave(cnt).FMMU[j].PhysStart, context->ec_slave(cnt).FMMU[j].PhysStartBit,
+                       context->ec_slave(cnt).FMMU[j].FMMUtype, context->ec_slave(cnt).FMMU[j].FMMUactive);
             }
             printf(" FMMUfunc 0:%d 1:%d 2:%d 3:%d\n",
-                     ec_slave[cnt].FMMU0func, ec_slave[cnt].FMMU2func, ec_slave[cnt].FMMU2func, ec_slave[cnt].FMMU3func);
-            printf(" MBX length wr: %d rd: %d MBX protocols : %2.2x\n", ec_slave[cnt].mbx_l, ec_slave[cnt].mbx_rl, ec_slave[cnt].mbx_proto);
+                     context->ec_slave(cnt).FMMU0func, context->ec_slave(cnt).FMMU2func, context->ec_slave(cnt).FMMU2func, context->ec_slave(cnt).FMMU3func);
+            printf(" MBX length wr: %d rd: %d MBX protocols : %2.2x\n", context->ec_slave(cnt).mbx_l, context->ec_slave(cnt).mbx_rl, context->ec_slave(cnt).mbx_proto);
             ssigen = ec_siifind(cnt, ECT_SII_GENERAL);
             /* SII general section */
             if (ssigen)
             {
-               ec_slave[cnt].CoEdetails = ec_siigetbyte(cnt, ssigen + 0x07);
-               ec_slave[cnt].FoEdetails = ec_siigetbyte(cnt, ssigen + 0x08);
-               ec_slave[cnt].EoEdetails = ec_siigetbyte(cnt, ssigen + 0x09);
-               ec_slave[cnt].SoEdetails = ec_siigetbyte(cnt, ssigen + 0x0a);
+               context->ec_slave(cnt).CoEdetails = ec_siigetbyte(cnt, ssigen + 0x07);
+               context->ec_slave(cnt).FoEdetails = ec_siigetbyte(cnt, ssigen + 0x08);
+               context->ec_slave(cnt).EoEdetails = ec_siigetbyte(cnt, ssigen + 0x09);
+               context->ec_slave(cnt).SoEdetails = ec_siigetbyte(cnt, ssigen + 0x0a);
                if((ec_siigetbyte(cnt, ssigen + 0x0d) & 0x02) > 0)
                {
-                  ec_slave[cnt].blockLRW = 1;
-                  ec_slave[0].blockLRW++;
+                  context->ec_slave(cnt).blockLRW = 1;
+                  context->ec_slave(0).blockLRW++;
                }
-               ec_slave[cnt].Ebuscurrent = ec_siigetbyte(cnt, ssigen + 0x0e);
-               ec_slave[cnt].Ebuscurrent += ec_siigetbyte(cnt, ssigen + 0x0f) << 8;
-               ec_slave[0].Ebuscurrent += ec_slave[cnt].Ebuscurrent;
+               context->ec_slave(cnt).Ebuscurrent = ec_siigetbyte(cnt, ssigen + 0x0e);
+               context->ec_slave(cnt).Ebuscurrent += ec_siigetbyte(cnt, ssigen + 0x0f) << 8;
+               context->ec_slave(0).Ebuscurrent += context->ec_slave(cnt).Ebuscurrent;
             }
             printf(" CoE details: %2.2x FoE details: %2.2x EoE details: %2.2x SoE details: %2.2x\n",
-                    ec_slave[cnt].CoEdetails, ec_slave[cnt].FoEdetails, ec_slave[cnt].EoEdetails, ec_slave[cnt].SoEdetails);
+                    context->ec_slave(cnt).CoEdetails, context->ec_slave(cnt).FoEdetails, context->ec_slave(cnt).EoEdetails, context->ec_slave(cnt).SoEdetails);
             printf(" Ebus current: %d[mA]\n only LRD/LWR:%d\n",
-                    ec_slave[cnt].Ebuscurrent, ec_slave[cnt].blockLRW);
-            if ((ec_slave[cnt].mbx_proto & ECT_MBXPROT_COE) && printSDO)
+                    context->ec_slave(cnt).Ebuscurrent, context->ec_slave(cnt).blockLRW);
+            if ((context->ec_slave(cnt).mbx_proto & ECT_MBXPROT_COE) && printSDO)
                     si_sdo(cnt);
                 if(printMAP)
             {
-                    if (ec_slave[cnt].mbx_proto & ECT_MBXPROT_COE)
+                    if (context->ec_slave(cnt).mbx_proto & ECT_MBXPROT_COE)
                         si_map_sdo(cnt);
                     else
                         si_map_sii(cnt);

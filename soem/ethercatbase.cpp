@@ -448,9 +448,7 @@ int ecx_portt::FRMW(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeo
  */
 uint16 ecx_portt::APRDw(uint16 ADP, uint16 ADO, int timeout)
 {
-	uint16 w;
-
-	w = 0;
+	uint16 w = 0;
 	APRD(ADP, ADO, sizeof(w), &w, timeout);
 
 	return w;
@@ -468,12 +466,9 @@ uint16 ecx_portt::APRDw(uint16 ADP, uint16 ADO, int timeout)
  */
 int ecx_portt::FPRD(uint16 ADP, uint16 ADO, uint16 length, void *data, int timeout)
 {
-	int wkc;
-	uint8 idx;
-
-	idx = getindex();
-	setupdatagram(&(txbuf[idx]), EC_CMD_FPRD, idx, ADP, ADO, length, data);
-	wkc = srconfirm(idx, timeout);
+	uint8 idx = getindex();
+	txbuf[idx].setupdatagram(EC_CMD_FPRD, idx, ADP, ADO, length, data, &txbuflength[idx]);
+	int wkc = srconfirm(idx, timeout);
 	if (wkc > 0)
 	{
 		rxbuf[idx].copyHeader(data, length);
